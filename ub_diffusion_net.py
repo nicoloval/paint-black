@@ -3,7 +3,6 @@
 OUTPUT
 ______
 * `options.output_active_folder + network_date + '.pkl'`
-* `cluster_is_black_ground_truth.zarr`
 * `cluster_is_black_final_{options.frequency}.zarr`
      array where eachi enters reveals when cluster(index) becomes black
 * `{options.output_folder}/diffusion_net_{options.frequency}.csv`

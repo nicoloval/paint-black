@@ -1,4 +1,26 @@
 #!/usr/bin/env python3
+"""
+OUTPUT
+------
+
+* `` csv file:
+    _['block'] = b.height
+    _['no_old_black_clusters'] = no_old_black_clusters
+    _['no_new_black_clusters'] = no_new_black_clusters
+    _['no_black_clusters_cumulative'] = no_black_cluster_cumulative
+    _['no_active_black_clusters'] = _["no_old_black_clusters"] + _["no_new_black_clusters"]
+    _['black2new_no_trx'] = black2new_no_trx
+    _['black2black_no_trx'] = black2black_no_trx
+    _['black2mix_no_trx'] = black2black_no_trx
+    _['not_black_no_trx'] = not_black_no_trx
+    _['total_trx'] = b.tx_count
+
+* `clust_is_black_when` int array, index is cluster, value is height block of black contagion
+* directory: for each block there is a pkl file containings:
+    - old_black_nodes: nodes appearing at this block which were already black
+    - new_black_nodes: nodes being blacked on this block
+    
+"""
 
 
 import blocksci
@@ -29,7 +51,8 @@ def parse_command_line():
     parser.add_option("--overwrite", action='store_true', dest = "overwrite" )
     parser.add_option("--output", action='store', dest = "output_folder", 
                         default="uniform_black/", type='str', help='directory to save outputs in')
-
+    parser.add_option("--max", action="store", dest="max_block", type='int',
+                                               default = None, help = "max block height")
 
     options, args = parser.parse_args()
 
@@ -140,7 +163,11 @@ if __name__ == "__main__":
     chrono = SimpleChrono()
 
     # LOAD STUFF
-    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg")
+    if options.max_block:
+        chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg", max_block=options.max_block)
+    else:
+        chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg")
+
     am = AddressMapper(chain)
     am.load_clusters(f"{options.cluster_data_folder}")
     # black_cluster: index-cluster, bool value-true if cluster is black
@@ -164,7 +191,6 @@ if __name__ == "__main__":
     chrono.print(message="init")
 
     print(f"[CALC] starts black bitcoin diffusion...")
-
 
     no_black_cluster_cumulative = 0
     # RUN ON ALL BLOCKS
