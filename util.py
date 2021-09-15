@@ -59,7 +59,7 @@ uzh_colors = {
 if socket.gethostname() == 'abacus':
     DIR_BCHAIN="/mnt/hdd_data/blockchain_data/"
     DIR_PARSED="/mnt/hdd_data/blockchain_parsed/"
-elif socket.gethostname() == 'later':
+elif socket.gethostname() == 'abacus-1':
     DIR_BCHAIN="/mnt/hdd_data/blockchain_data/"
     DIR_PARSED="/mnt/hdd_data/blockchain_parsed/"
 

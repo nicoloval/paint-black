@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+"""
+OUTPUT
+______
+* `options.output_active_folder + network_date + '.pkl'`
+* `cluster_is_black_ground_truth.zarr`
+* `cluster_is_black_final_{options.frequency}.zarr`
+     array where eachi enters reveals when cluster(index) becomes black
+* `{options.output_folder}/diffusion_net_{options.frequency}.csv`
+    csv containing informations on each daily network
+"""
 
 
 import blocksci
@@ -31,6 +41,11 @@ def parse_command_line():
                         default="uniform_black/", type='str', help='directory to save outputs in')
     parser.add_option("--freq", action="store", dest="frequency",
                                    default = "day", help = "time aggregation of networks - choose between day, week, 2weeks, 4weeks")
+    parser.add_option("--start", action="store", dest="start", type='int',
+                                   default = None, help = "starting number")
+    parser.add_option("--end", action="store", dest="end", type='int',
+                                   default = None, help = "ending number")
+
 
 
     options, args = parser.parse_args()
@@ -185,10 +200,19 @@ if __name__ == "__main__":
 
     print(f"[CALC] starts black bitcoin diffusion...")
 
+    if options.start:
+        start = options.start
+    else:
+        start = 0
+    if options.end:
+        end = options.end
+    else:
+        e = len(network_list)
+    network_list = network_list[start:end]
 
     # RUN ON ALL NETWORKS
     for network in network_list:
-        network_date = network[:-12]
+        network_date = network[:10]
         _ = {}
         # load network
         g = nx.read_graphml(options.network_folder + network)
@@ -244,6 +268,7 @@ if __name__ == "__main__":
 
         with open(options.output_active_folder + network_date + '.pkl', "wb") as pfile:
             pkl.dump([old_black_nodes, clust_is_black_active_set], pfile)
+
 
     zarr.save(options.output_folder + f'cluster_is_black_final_{options.frequency}.zarr', clust_is_black_when)
 
