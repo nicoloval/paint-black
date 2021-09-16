@@ -206,7 +206,7 @@ if __name__ == "__main__":
     if options.end:
         end = options.end
     else:
-        e = len(network_list)
+        end = len(network_list)
     network_list = network_list[start:end]
 
     # RUN ON ALL NETWORKS
