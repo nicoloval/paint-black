@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+TODO:
+    - add total_clusters in the block as union of clusters input and clusters output
 OUTPUT
 ------
 

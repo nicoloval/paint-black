@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+"""Output:
+    ground_truth_clust_id.csv
+    - cluster_is_black_ground_truth.zarr
+        dataframe as csv
+        dataframe to relate entities, btc addresses and cluster ids
+    - cluster_is_black_ground_truth.zarr
+        zarr numpy array
+        index is cluster, value is bool: True if black ground truth, False otherwise
+"""
 
 
 import blocksci
