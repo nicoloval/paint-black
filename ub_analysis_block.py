@@ -103,7 +103,7 @@ def parse_command_line():
         os.mkdir(options.output_active_folder)
     """
 
-    options.output_csv = f"{options.output_folder}/diffusion_block.csv"
+    options.output_csv = f"{options.output_folder}/diffusion_analysis_block.csv"
 
 
     # atm ground truth is in the output folder

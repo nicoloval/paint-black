@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Output:
-    ground_truth_clust_id.csv
-    - cluster_is_black_ground_truth.zarr
-        dataframe as csv
-        dataframe to relate entities, btc addresses and cluster ids
-    - cluster_is_black_ground_truth.zarr
-        zarr numpy array
-        index is cluster, value is bool: True if black ground truth, False otherwise
+"""
+input:
+- `{DIR_PARSED/bitcoin_darknet/ground_truth_id.csv}` ground trught dataframe
+- `{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_data/` clustering data
+- `{DIR_PARSED}/{options.currency}.cfg` blockchain data
+output:
+in `{options.output_folder}/heur_{options.heuristic}_data/`
+* `cluster_is_black_ground_truth.zarr`:
+	index is cluster, value is bool: True if black ground truth, False otherwise
+* `ground_truth_clust_id.csv`:
+	dataframe to relate entities, btc addresses and cluster ids
 """
 
 

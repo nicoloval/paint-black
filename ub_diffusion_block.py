@@ -1,50 +1,11 @@
 #!/usr/bin/env python3
 """
-TODO:
-    - add total_clusters in the block as union of clusters input and clusters output
-OUTPUT
-------
-
-* `` csv file:
-    _['block'] = b.height 
-    # number of clusters active in the block already black before the block mining
-    _['no_old_black_clusters'] = no_old_black_clusters
-    # number of clusters becoming black and active in the block
-    _['no_new_black_clusters'] = no_new_black_clusters
-    # number of black nodes as input
-    _['no_black_clusters_input'] = no_black_clusters_input
-    # number of black nodes as output
-    _['no_black_clusters_output'] = no_black_clusters_output
-    # number of old black nodes as output
-    _['no_old_black_clusters_output'] = no_old_black_clusters_output
-    # number of new black nodes as output
-    _['no_new_black_clusters_output'] = no_new_black_clusters_output
-    # cumulative number of black clusters at this block height
-    _['no_black_clusters_cumulative'] = no_black_clusters_cumulative
-    # total number of clusters as input
-    _['no_clusters_input'] = no_clusters_input
-    # total number of clusters as output
-    _['no_clusters_output'] = no_clusters_output
-    # number of active black nodes in this block
-    _['no_active_black_clusters'] = _["no_old_black_clusters"] + _["no_new_black_clusters"]
-    # number of BTN links from old to new black nodes
-    _['black_old2new_no_links'] = black_old2new_no_links
-    # number of BTN links from old to old black nodes
-    _['black_old2new_no_links'] = black_old2old_no_links
-    # number of BTN links not including black nodes at all
-    _['white2black_no_links'] = white2white_no_links
-    # number of BTN links going from white nodes to black nodes
-    _['white_no_links'] = white2black_no_links
-    # total BTN links in block
-    _['no_links'] = no_links
-    # number of black tainted trxs
-    _['no_black_trxs'] = no_black_trxs
-    # number of white trxs
-    _['no_white_trxs'] = no_white_trxs
-    # total number of trxs
-    _['total_trxs'] = b.tx_count
-
-* `clust_is_black_when` int array, index is cluster, value is height block of black contagion
+input:
+    - `{options.black_data_folder}/cluster_is_black_ground_truth.zarr` ground truth clusters from `ub_ground_truth.py`
+    - `{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_data/` clustering data
+    - `{DIR_PARSED}/{options.currency}.cfg` blockchain data
+outputs:
+    * zarr file: `cluster_is_black_when_block.zarr` index is cluster id, value is int block when the cluster became black
 """
 
 
@@ -203,33 +164,6 @@ if __name__ == "__main__":
     clust_is_black_ground = zarr.load(f"{options.black_data_folder}/cluster_is_black_ground_truth.zarr")
     # PRE-PROCESSING
 
-    # csv prepping
-    col_names = [
-	'block',
-	'no_old_black_clusters',
-	'no_new_black_clusters',
-	'no_black_clusters_input',
-	'no_black_clusters_output',
-	'no_old_black_clusters_output',
-	'no_new_black_clusters_output',
-	'no_black_clusters_cumulative',
-	'no_clusters_input',
-	'no_clusters_output',
-	'no_active_black_clusters',
-	'black_old2new_no_links',
-	'black_old2old_no_links',
-	'white2black_no_links',
-	'white2white_no_links',
-	'no_links',
-	'no_black_trxs',
-	'no_white_trxs',
-	'total_trxs'
-	]
-
-    csv_fout = DictWriter(open(options.output_csv, "w") , fieldnames=col_names)
-
-    csv_fout.writeheader()
-
     # define blocks range after given dates
     if options.start_date == None:
         start_date = datetime.fromtimestamp(chain.blocks[0].timestamp).date()
@@ -244,187 +178,49 @@ if __name__ == "__main__":
 
 
     # set of black users
-    # node type should change to str because in graphs nodes ids are str
-    # clust_is_black_ground_set = set([str(i) for i in range(len(clust_is_black_ground)) if clust_is_black_ground[i]])
     clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground))
-    # clust_is_black_cum_set = set([])
-    # clust_is_black_cum = np.zeros(len(clust_is_black_ground), dtype=bool)
     clust_is_black_when = np.zeros(len(clust_is_black_ground), dtype=int)
 
     chrono.print(message="init")
 
     print(f"[CALC] starts black bitcoin diffusion...")
 
-    no_black_clusters_cumulative = 0
     # RUN ON ALL BLOCKS
     for b in blocks_range: 
-        _ = {}
-        old_black_nodes = set([])
         new_black_nodes = set([])
 
-        black_old2new_no_links = 0
-        black_old2old_no_links = 0
-        white2black_no_links = 0
-        white2white_no_links = 0
-        not_black_no_links = 0
-        no_links = 0
-
-        no_black_trxs = 0
-        no_white_trxs = 0
-
-        no_black_clusters_input = 0
-        no_black_clusters_output = 0
-        no_old_black_clusters_output = 0
-        no_new_black_clusters_output = 0
-
-        no_clusters_input = 0
-        no_clusters_output = 0
- 
         # on a single trx
         for trx in b.txes:
-            loc_old_black_nodes = set([])
             loc_new_black_nodes = set([])
-
-            loc_no_black_clusters_input = 0
-            loc_no_black_clusters_output = 0
-            loc_no_old_black_clusters_output = 0
-            loc_no_new_black_clusters_output = 0
 
             flag_input_black = False
 
             if trx.is_coinbase: continue
 
-            tup_inputs = {}
-            tup_outputs = {}
-
-            # following 2 loops are like 7-blocksci-buil-networks
-            # Builds reduced representation of inputs
-            trx_input_value = 0
             for inp in trx.inputs:
-                    cluster, value= am.cluster[am[inp.address]], inp.value
-                    if cluster in tup_inputs:
-                        tup_inputs[cluster] += value
-                    else:
-                        tup_inputs[cluster] = value
-                    trx_input_value += value
-            # Builds reduced representation of outputs
-            for out in trx.outputs:
-                    cluster, value= am.cluster[am[out.address]], out.value
-                    if cluster in tup_outputs:
-                        tup_outputs[cluster] += value
-                    else:
-                        tup_outputs[cluster] = value
-
-            for inp in tup_inputs:
+                cluster = am.cluster[am[inp.address]]
                 # if the input is already black
-                if inp in clust_is_black_ground_set:
+                if cluster in clust_is_black_ground_set:
                     # at least on of the input is black
                     flag_input_black = True
-                    # add the black input to old black nodes
-                    loc_old_black_nodes.add(inp)
-                    loc_no_black_clusters_input += 1
 
             # if at least one input is black
             if flag_input_black:
-                for out in tup_outputs:
-                    loc_no_black_clusters_output += 1
-                    if out in clust_is_black_ground_set:
-                        # the cluster is already black
-                        loc_old_black_nodes.add(out)
-                        loc_no_old_black_clusters_output += 1
-                    else:
+                for out in trx.outputs:
+                    cluster = am.cluster[am[out.address]]
+                    if cluster not in clust_is_black_ground_set:
                         # the cluster was not black before
                         # add the cluster to new black nodes
-                        loc_new_black_nodes.add(out)
+                        loc_new_black_nodes.add(cluster)
                         # update clust_is_black_when
-                        clust_is_black_when[out] = b.height
-                        loc_no_new_black_clusters_output += 1
-            else:
-                for out in tup_outputs:
-                    if out in clust_is_black_ground_set:
-                        loc_old_black_nodes.add(out)
-                        loc_no_black_clusters_output += 1
-                        loc_no_old_black_clusters_output += 1
-                        # print(loc_no_black_clusters_output)
+                        clust_is_black_when[cluster] = b.height
 
-            # all trxs have been cheked 
-            # clusters
-            loc_no_clusters_input = len(tup_inputs)
-            loc_no_clusters_output = len(tup_outputs)
-            no_clusters_input += loc_no_clusters_input
-            no_clusters_output += loc_no_clusters_output
-            no_black_clusters_input += loc_no_black_clusters_input
-            no_black_clusters_output += loc_no_black_clusters_output
-            no_old_black_clusters_output += loc_no_old_black_clusters_output
-            no_new_black_clusters_output += loc_no_new_black_clusters_output
-            # links    
-            black_old2new_no_links += loc_no_black_clusters_input*loc_no_new_black_clusters_output
-            black_old2old_no_links += loc_no_black_clusters_input*loc_no_old_black_clusters_output
-            white2black_no_links += (loc_no_clusters_input - loc_no_black_clusters_input)*(loc_no_black_clusters_output)
-            white2white_no_links += (loc_no_clusters_input - loc_no_black_clusters_input)*(loc_no_clusters_output - loc_no_black_clusters_output) 
-            no_links += loc_no_clusters_input*loc_no_clusters_output
-            # trxs
-            no_black_trxs += int(flag_input_black)
-            no_white_trxs += int(not flag_input_black)
-
-            # old and new nodes local update
-            old_black_nodes.update(loc_old_black_nodes)
             new_black_nodes.update(loc_new_black_nodes)
 
         # block level
         # update black nodes and write them
         clust_is_black_ground_set.update(new_black_nodes)
-        # clust_is_black_cum_set.update(old_black_nodes.union(new_black_nodes))
-        no_old_black_clusters = len(old_black_nodes)
-        no_new_black_clusters = len(new_black_nodes)
-        no_black_clusters_cumulative += no_new_black_clusters
 
-
-        _['block'] = b.height 
-        # number of clusters active in the block already black before the block mining
-        _['no_old_black_clusters'] = no_old_black_clusters
-        # number of clusters becoming black and active in the block
-        _['no_new_black_clusters'] = no_new_black_clusters
-        # number of black nodes as input
-        _['no_black_clusters_input'] = no_black_clusters_input
-        # number of black nodes as output
-        _['no_black_clusters_output'] = no_black_clusters_output
-        # number of old black nodes as output
-        _['no_old_black_clusters_output'] = no_old_black_clusters_output
-        # number of new black nodes as output
-        _['no_new_black_clusters_output'] = no_new_black_clusters_output
-        # cumulative number of black clusters at this block height
-        _['no_black_clusters_cumulative'] = no_black_clusters_cumulative
-        # total number of clusters as input
-        _['no_clusters_input'] = no_clusters_input
-        # total number of clusters as output
-        _['no_clusters_output'] = no_clusters_output
-        # number of active black nodes in this block
-        _['no_active_black_clusters'] = _["no_old_black_clusters"] + _["no_new_black_clusters"]
-        # number of BTN links from old to new black nodes
-        _['black_old2new_no_links'] = black_old2new_no_links
-        # number of BTN links from old to old black nodes
-        _['black_old2old_no_links'] = black_old2old_no_links
-        # number of BTN links not including black nodes at all
-        _['white2black_no_links'] = white2black_no_links
-        # number of BTN links going from white nodes to black nodes
-        _['white2white_no_links'] = white2white_no_links
-        # total BTN links in block
-        _['no_links'] = no_links
-        # number of black tainted trxs
-        _['no_black_trxs'] = no_black_trxs
-        # number of white trxs
-        _['no_white_trxs'] = no_white_trxs
-        # total number of trxs
-        _['total_trxs'] = b.tx_count
-
-        csv_fout.writerow(_)
-
-    # TODO: do we really need this useless drive space?
-    """
-        with open(options.output_active_folder + str(b.height) + '.pkl', "wb") as pfile:
-            pkl.dump([old_black_nodes, new_black_nodes], pfile)
-    """
 
     zarr.save(options.output_folder + f'cluster_is_black_when_block.zarr', clust_is_black_when)
 
