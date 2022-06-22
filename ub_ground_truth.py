@@ -160,7 +160,7 @@ if __name__ == "__main__":
 
     chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg") # load the blockchain
     print(f"{DIR_PARSED}/{options.currency}.cfg")
-    am = AddressMapper(chain) 
+    am = AddressMapper(chain)
     am.load_clusters(f"{options.cluster_data_folder}") #this data should already be on the server.
 
     no_clusters = max( am.cluster ) + 1 # print the number of clusters
@@ -172,6 +172,7 @@ if __name__ == "__main__":
 
     print("[CALC] who_is_black ... ") #
     clust_is_black = np.zeros(no_clusters, dtype=bool)
+    print(clust_is_black)
 
     df = df.loc[df['entity'].isin(darknet)]  # drop not darknet entities from ground truth
     df["address_id"] = [catch(chain.address_from_string(a), am) for a in df.address]  # find address id
@@ -185,6 +186,7 @@ if __name__ == "__main__":
     # test print
     print(c_indices)
     print(clust_is_black[c_indices[1:10]])
+    print(clust_is_black)
     # save files
     df.to_csv(f"{options.output_folder}/ground_truth_clust_id.csv")
     zarr.save(f"{options.output_folder}/cluster_is_black_ground_truth.zarr", clust_is_black)
