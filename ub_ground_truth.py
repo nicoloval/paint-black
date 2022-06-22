@@ -59,7 +59,7 @@ def parse_command_line(): #this is a function to pass options to the python scri
     else:
         options.output_folder = f"{options.output_folder}/heur_{options.heuristic}_data/"
         if not os.path.exists(options.output_folder):
-            os.mkdir(options.output_folder)
+            os.makedirs(options.output_folder)
 
 
     return options, args
