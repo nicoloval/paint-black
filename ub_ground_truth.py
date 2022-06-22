@@ -167,7 +167,8 @@ if __name__ == "__main__":
     chrono.print(message="init")
 
 
-    print("[CALC] who_is_black ... ") # 
+    print("[CALC] who_is_black ... ") #
+    np.set_printoptions(threshold=sys.maxsize)
     clust_is_black = np.zeros(no_clusters, dtype=bool)
     print("clust_is_black before:")
     print(clust_is_black)
