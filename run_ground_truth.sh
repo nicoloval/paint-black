@@ -1,5 +1,4 @@
 #!/bin/bash
-# this script calls ground truth script for each heuristic
 
 echo "heur 1"
 python3 ub_ground_truth.py --curr=BTC --heur=1 --output=uniform_black
