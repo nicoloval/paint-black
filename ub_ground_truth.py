@@ -169,8 +169,6 @@ if __name__ == "__main__":
 
     print("[CALC] who_is_black ... ") #
     clust_is_black = np.zeros(no_clusters, dtype=bool)
-    print("clust_is_black before:")
-    print(clust_is_black = True)
 
     df = df.loc[df['entity'].isin(darknet)]  # drop not darknet entities from ground truth
     df["address_id"] = [catch(chain.address_from_string(a), am) for a in df.address]  # find address id
@@ -181,8 +179,9 @@ if __name__ == "__main__":
     c_indices = am.cluster[df.address_id]  # find black cluster indices
     clust_is_black[c_indices] = True  # taint black clusters in array format
 
-    print("clust_is_black after:")
-    print(clust_is_black = True)
+    # test print
+    print(c_indices)
+    print(clust_is_black[c_indices[1:10]])
     # save files
     df.to_csv(f"{options.output_folder}/ground_truth_clust_id.csv")
     zarr.save(f"{options.output_folder}/cluster_is_black_ground_truth.zarr", clust_is_black)
