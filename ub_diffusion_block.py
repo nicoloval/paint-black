@@ -5,9 +5,9 @@ input:
     - `{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_data/` clustering data
     - `{DIR_PARSED}/{options.currency}.cfg` blockchain data
 outputs:
-    * zarr file: `cluster_is_black_when_block.zarr` index is cluster id, value is int block when the cluster became black
+    * zarr file: `cluster_is_black_when_block.zarr` index is cluster id, value is int block when the cluster became black which can also represent time.
 """
-
+# here in this script we replicate the diffusion and from ground-truth we see how users turn black block by block
 
 import blocksci
 
@@ -74,7 +74,7 @@ def parse_command_line():
     return options, args
 
 
-class AddressMapper():
+class AddressMapper(): # same as before
     def __init__(self, chain):
         self.chain = chain
 
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     am = AddressMapper(chain)
     am.load_clusters(f"{options.cluster_data_folder}")
     # black_cluster: index-cluster, bool value-true if cluster is black
-    clust_is_black_ground = zarr.load(f"{options.black_data_folder}/cluster_is_black_ground_truth.zarr")
+    clust_is_black_ground = zarr.load(f"{options.black_data_folder}/cluster_is_black_ground_truth.zarr") # same file from ground truth.py file
     # PRE-PROCESSING
 
     # define blocks range after given dates
@@ -178,8 +178,8 @@ if __name__ == "__main__":
 
 
     # set of black users
-    clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground))
-    clust_is_black_when = np.zeros(len(clust_is_black_ground), dtype=int)
+    clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground)) # transform clust_is_black_ground into a set where we consider only black clusters.
+    clust_is_black_when = np.zeros(len(clust_is_black_ground), dtype=int) # initialize array
 
     chrono.print(message="init")
 
@@ -191,17 +191,17 @@ if __name__ == "__main__":
 
         # on a single trx
         for trx in b.txes:
-            loc_new_black_nodes = set([])
+            loc_new_black_nodes = set([]) # temporary variable as a set
 
-            flag_input_black = False
+            flag_input_black = False # to flag or checks if in this transaction has black input
 
-            if trx.is_coinbase: continue
+            if trx.is_coinbase: continue # skip mining transactions which do not have inputs but just miner output
 
-            for inp in trx.inputs:
+            for inp in trx.inputs: # loop over inputs which are an address
                 cluster = am.cluster[am[inp.address]]
                 # if the input is already black
                 if cluster in clust_is_black_ground_set:
-                    # at least on of the input is black
+                    # if at least one of the input is black 
                     flag_input_black = True
 
             # if at least one input is black
@@ -221,7 +221,7 @@ if __name__ == "__main__":
         # update black nodes and write them
         clust_is_black_ground_set.update(new_black_nodes)
 
-
+    # here the index of the array represents a cluster, and the value is the block number/ timestamp. (value for clusters that were never black should be zero)
     zarr.save(options.output_folder + f'cluster_is_black_when_block.zarr', clust_is_black_when)
 
     chrono.print(message="took", tic="last")
