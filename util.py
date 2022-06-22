@@ -64,7 +64,7 @@ elif socket.gethostname() == 'abacus-1':
     DIR_PARSED="/mnt/hdd_data/blockchain_parsed/"
 elif socket.gethostname() == 'consensus-2':
     DIR_BCHAIN="/local/scratch/exported/blockchain_parsed"
-    DIR_PARSED="/local/scratch/exported/blockchain_data"
+    DIR_PARSED="/export/consensus-2/blockchain_parsed/" # updated location
 
 
 def sendEmail(username,sender,reciever,pasw,subject, msg):

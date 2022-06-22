@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-input:
-- `{DIR_PARSED/bitcoin_darknet/ground_truth_id.csv}` ground trught dataframe
-- `{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_data/` clustering data
-- `{DIR_PARSED}/{options.currency}.cfg` blockchain data
+input: these files are already on the server
+- `{DIR_PARSED/bitcoin_darknet/ground_truth_id.csv}` # ground truth dataframe with addresses connected to criminal activities
+- `{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_data/` # clustering data, think of them as a map from many addressess to a user for all users.
+- `{DIR_PARSED}/{options.currency}.cfg` # blockchain data in a different format for blocksci  
 output:
-in `{options.output_folder}/heur_{options.heuristic}_data/`
+in `{options.output_folder}/heur_{options.heuristic}_data/` # inside this it will create two files.
 * `cluster_is_black_ground_truth.zarr`:
-	index is cluster, value is bool: True if black ground truth, False otherwise
+	where index is cluster number, value is bool: True if black (originally) ground truth, False otherwise
 * `ground_truth_clust_id.csv`:
 	dataframe to relate entities, btc addresses and cluster ids
 """
 
+# Note: we only have to run this once for each currency/heuristic pair, then they are saved.
 
 import blocksci
 
@@ -26,7 +27,7 @@ from util import SYMBOLS, DIR_BCHAIN, DIR_PARSED, SimpleChrono, darknet
 
 
 
-def parse_command_line():
+def parse_command_line(): #this is a function to pass options to the python script: currency, heuristics (4 different), etc.
     import sys, optparse
 
     parser = optparse.OptionParser()
@@ -43,7 +44,7 @@ def parse_command_line():
 
     options, args = parser.parse_args()
 
-    options.currency = SYMBOLS[options.currency]
+    options.currency = SYMBOLS[options.currency] # resolved in util.py
 
 
     options.cluster_folder = f"{DIR_PARSED}/{options.currency}/heur_{options.heuristic}/"
@@ -61,8 +62,8 @@ def parse_command_line():
     return options, args
 
 
-
-class AddressMapper():
+# this class creates a map from addresses to the set {0 -> number of cluster}, in other words it helps to use arrays to store the information. 
+class AddressMapper(): # This creates the map that clusters the addresses to actual users. Treat it a a blackbox for now.
     def __init__(self, chain):
         self.chain = chain
 
@@ -141,39 +142,40 @@ def catch(address, am):
         return np.nan
 
 if __name__ == "__main__":
-    options, args = parse_command_line()
+    options, args = parse_command_line() # parse the options
 
     # heur_file   = zarr.open_array(f"{options.cluster_folder}_data/address_cluster_map.zarr", mode = 'r')
     # memstore    = zarr.MemoryStore()
     # zarr.copy_store(heur_file.store, memstore)
     # heur_mem    = zarr.open_array(memstore)
-    chrono = SimpleChrono()
+    chrono = SimpleChrono() # measure time
 
     df = pd.read_csv(f"{DIR_PARSED}/bitcoin_darknet/ground_truth_id.csv")
 
-    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg")
-    am = AddressMapper(chain)
-    am.load_clusters(f"{options.cluster_data_folder}")
+    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg") # load the blockchain
+    am = AddressMapper(chain) 
+    am.load_clusters(f"{options.cluster_data_folder}") #this data should already be on the server.
 
-    no_clusters = max( am.cluster ) + 1
+    no_clusters = max( am.cluster ) + 1 # print the number of clusters
     print(f"[INFO] #clusters: {no_clusters}")
 
 
     chrono.print(message="init")
 
 
-    print("[CALC] who_is_black ... ")
+    print("[CALC] who_is_black ... ") # 
     clust_is_black = np.zeros(no_clusters, dtype=bool)
 
-    df = df.loc[df['entity'].isin(darknet)]  # drop not darknet entities
+    df = df.loc[df['entity'].isin(darknet)]  # drop not darknet entities from ground truth
     df["address_id"] = [catch(chain.address_from_string(a), am) for a in df.address]  # find address id
     df = df.dropna(subset=["address_id"])  # drop na address
-    df = df.astype({'address_id' : 'int64'})  # address_id column must be int
-    df['cluster_id'] = am.cluster[df.address_id]  # add cluster id to entities address
+    df = df.astype({'address_id' : 'int64'})  # address_id column must be int - type conversion
+    df['cluster_id'] = am.cluster[df.address_id]  # use address mapper to add cluster id to entities address or cluster id
 
     c_indices = am.cluster[df.address_id]  # find black cluster indices
-    clust_is_black[c_indices] = True  # taint black clusters
+    clust_is_black[c_indices] = True  # taint black clusters in array format
 
+    # save files
     df.to_csv(f"{options.output_folder}/ground_truth_clust_id.csv")
     zarr.save(f"{options.output_folder}/cluster_is_black_ground_truth.zarr", clust_is_black)
     del clust_is_black 
