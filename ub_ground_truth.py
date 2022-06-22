@@ -131,6 +131,7 @@ class AddressMapper(): # This creates the map that clusters the addresses to act
 #        self.__offsets = pickle.load( open(f"{output_folder}/offsets.pickle", "rb") )
 
     def load_clusters(self, input_folder):
+        print(f"{input_folder}/address_cluster_map.zarr")
         self.cluster = zarr.load(f"{input_folder}/address_cluster_map.zarr")
 
 
