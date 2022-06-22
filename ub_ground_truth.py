@@ -51,6 +51,9 @@ def parse_command_line(): #this is a function to pass options to the python scri
 
     options.cluster_data_folder = f"{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_data/"
 
+    print(f"{DIR_PARSED}/{options.currency}/heur_{options.heuristic}/")
+    print(f"{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_data/")
+
     if options.output_folder is None:
         options.output_folder = options.cluster_data_folder
     else:
