@@ -168,7 +168,7 @@ if __name__ == "__main__":
 
 
     print("[CALC] who_is_black ... ") #
-    np.set_printoptions(threshold=sys.maxsize)
+    np.set_printoptions(threshold=200)
     clust_is_black = np.zeros(no_clusters, dtype=bool)
     print("clust_is_black before:")
     print(clust_is_black)
