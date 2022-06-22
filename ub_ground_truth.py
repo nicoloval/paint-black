@@ -154,7 +154,9 @@ if __name__ == "__main__":
     # heur_mem    = zarr.open_array(memstore)
     chrono = SimpleChrono() # measure time
 
-    df = pd.read_csv(f"{DIR_PARSED}bitcoin_darknet/ground_truth_id.csv")
+    df = pd.read_csv(f"{DIR_PARSED}/bitcoin_darknet/ground_truth_id.csv")
+
+    print(f"{DIR_PARSED}/bitcoin_darknet/ground_truth_id.csv")
 
     chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg") # load the blockchain
     print(f"{DIR_PARSED}/{options.currency}.cfg")
