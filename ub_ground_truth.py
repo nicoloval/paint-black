@@ -156,6 +156,7 @@ if __name__ == "__main__":
     df = pd.read_csv(f"{DIR_PARSED}/bitcoin_darknet/ground_truth_id.csv")
 
     chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg") # load the blockchain
+    print(f"{DIR_PARSED}/{options.currency}.cfg")
     am = AddressMapper(chain) 
     am.load_clusters(f"{options.cluster_data_folder}") #this data should already be on the server.
 
