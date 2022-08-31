@@ -186,7 +186,7 @@ if __name__ == "__main__":
     print(f"[CALC] starts black bitcoin diffusion...")
 
     # RUN ON ALL BLOCKS
-    for b in blocks_range: 
+    for b in tqdm(blocks_range): 
         new_black_nodes = set([])
 
         # on a single trx
