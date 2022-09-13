@@ -59,3 +59,92 @@ def parse_command_line():
 
 
     return options, args
+
+
+class AddressMapper():
+    def __init__(self, chain):
+        self.chain = chain
+
+        self.__address_types = [blocksci.address_type.nonstandard, blocksci.address_type.pubkey,
+                                blocksci.address_type.pubkeyhash, blocksci.address_type.multisig_pubkey,
+                                blocksci.address_type.scripthash, blocksci.address_type.multisig,
+                                blocksci.address_type.nulldata, blocksci.address_type.witness_pubkeyhash,
+                                blocksci.address_type.witness_scripthash, blocksci.address_type.witness_unknown]
+
+        self.__counter_addresses = { _:self.chain.address_count(_) for _ in self.__address_types }
+
+        self.__offsets = {}
+        offset = 0
+        for _ in self.__address_types:
+            self.__offsets[_] = offset
+            offset += self.__counter_addresses[_]
+
+
+        self.total_addresses = offset
+        print(f"[INFO] #addresses: {self.total_addresses}")
+
+
+    def map_clusters(self,cm):
+        cluster_vector = {_: np.zeros(self.__counter_addresses[_], dtype=np.int64) for _ in self.__address_types }
+
+        self.cluster = np.zeros(self.total_addresses, dtype=np.int64)
+        offset = 0
+        for _at in cluster_vector.keys():
+            clusters = cluster_vector[_at]
+            print(f"{_at}     -  {len(clusters)}")
+            for _i, _add in enumerate(chain.addresses(_at)):
+                clusters[_i] = cm.cluster_with_address(_add).index
+        offset = 0
+        for _ in cluster_vector.keys():
+            v = cluster_vector[_]
+            self.cluster[offset:offset + len(v)] = v
+            offset += len(v)
+
+
+    def dump_clusters(self, output_folder):
+        if not os.path.exists(output_folder):
+            os.mkdir(output_folder)
+        zarr.save(f"{output_folder}/address_cluster_map.zarr", self.cluster)
+
+
+    def load_clusters(self, input_folder):
+        self.cluster = zarr.load(f"{input_folder}/address_cluster_map.zarr")
+
+
+    def __getitem__(self,addr):
+        return self.__offsets[addr.raw_type]+ addr.address_num-1
+
+    
+if __name__ == "__main__":
+    options, args = parse_command_line()
+    chrono = SimpleChrono()
+
+    # LOAD STUFF
+    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_old.cfg")
+
+    am = AddressMapper(chain)
+    am.load_clusters(f"{options.cluster_data_folder}")
+    clust_is_black_ground = zarr.load(f"{options.black_data_folder}/cluster_is_black_ground_truth.zarr")
+    
+    # PRE-PROCESSING
+
+    # define blocks range after given dates
+    if options.start_date == None:
+        start_date = datetime.fromtimestamp(chain.blocks[0].timestamp).date()
+    else:
+        start_date = datetime.strptime(options.start_date, "%Y-%m-%d").date()
+    if options.end_date == None:
+        end_date = datetime.fromtimestamp(chain.blocks[-1].timestamp).date()
+    else:
+        end_date = datetime.strptime(options.end_date, "%Y-%m-%d").date()
+
+    blocks_range = chain.range(start_date, end_date)
+
+
+    # set of black users
+    clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground))
+    clust_is_black_when = np.zeros(len(clust_is_black_ground), dtype=int)
+
+    chrono.print(message="init")
+
+    print(f"[CALC] starts black bitcoin diffusion...")
