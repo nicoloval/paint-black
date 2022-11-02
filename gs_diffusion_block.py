@@ -13,6 +13,7 @@ import blocksci
 
 import sys, os, os.path, socket
 import numpy as np
+np.set_printoptions(threshold=sys.maxsize)
 import networkx as nx
 import zarr
 import time
@@ -22,6 +23,8 @@ from csv import DictWriter, DictReader
 import pickle as pkl
 from datetime import datetime, timedelta
 from itertools import compress
+from scipy.sparse import csc_matrix
+from collections import defaultdict
 
 from util import SYMBOLS, DIR_BCHAIN, DIR_PARSED, SimpleChrono
 
@@ -99,7 +102,6 @@ class AddressMapper(): # same as before
 
 
     def map_clusters(self,cm):
-#        address_vector = {_: np.zeros(self.__counter_addresses[_], dtype=np.int64) for _ in self.__address_types }
         cluster_vector = {_: np.zeros(self.__counter_addresses[_], dtype=np.int64) for _ in self.__address_types }
 
         self.cluster = np.zeros(self.total_addresses, dtype=np.int64)
@@ -107,13 +109,8 @@ class AddressMapper(): # same as before
         for _at in cluster_vector.keys():
             clusters = cluster_vector[_at]
             print(f"{_at}     -  {len(clusters)}")
-#            addrs = address_vector[_at]
             for _i, _add in enumerate(chain.addresses(_at)):
-#                addrs[_i] = _add.address_num
                 clusters[_i] = cm.cluster_with_address(_add).index
-                #max_addr_num = max(max_addr_num, addrs[_i])
-#        pickle.dump(cluster_vector, open("cluster_dict.pickle","wb"))
-
         offset = 0
         for _ in cluster_vector.keys():
             v = cluster_vector[_]
@@ -128,16 +125,6 @@ class AddressMapper(): # same as before
         zarr.save(f"{output_folder}/address_cluster_map.zarr", self.cluster)
 
 
-#    def dump_offsets(self, output_folder):
-#        if not os.path.exists(output_folder):
-#            os.mkdir(output_folder)
-#        pickle.dump(self.__offsets, open(f"{output_folder}/offsets.pickle", "wb") )
-
-#    def load_offsets(self, output_folder):
-#        if not os.path.exists(output_folder):
-#            os.mkdir(output_folder)
-#        self.__offsets = pickle.load( open(f"{output_folder}/offsets.pickle", "rb") )
-
     def load_clusters(self, input_folder):
         self.cluster = zarr.load(f"{input_folder}/address_cluster_map.zarr")
 
@@ -146,24 +133,48 @@ class AddressMapper(): # same as before
     def __getitem__(self,addr):
         return self.__offsets[addr.raw_type]+ addr.address_num-1
 
+
+class Graph:
+    
+    def __init__(self):
+        self.graph = dict()
+        
+        
+    def add_edge(self, node1, node2, cost):
+        if node1 not in self.graph:
+            self.graph[node1] = []
+            
+        if node2 not in self.graph:
+            self.graph[node2] = []
+        
+        self.graph[node1].append((node2, int(cost)))
+        
+        if len(self.graph[node1]) == 0:
+            self.graph.pop(node1)
+        
+    def print_graph(self):
+        
+        for source, destination in self.graph.items():
+            print(f"{source}->{destination}")
+    
+    def graph_size(self):
+        return len(self.graph)
+
 if __name__ == "__main__":
     options, args = parse_command_line()
 
-    # heur_file   = zarr.open_array(f"{options.cluster_folder}_data/address_cluster_map.zarr", mode = 'r')
-    # memstore    = zarr.MemoryStore()
-    # zarr.copy_store(heur_file.store, memstore)
-    # heur_mem    = zarr.open_array(memstore)
+    # Start Chrono
     chrono = SimpleChrono()
 
-    # LOAD STUFF
-    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg")
-
+    # Load chain and initialize address mapper
+    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_old.cfg")
     am = AddressMapper(chain)
     am.load_clusters(f"{options.cluster_data_folder}")
-    # black_cluster: index-cluster, bool value-true if cluster is black
-    clust_is_black_ground = zarr.load(f"{options.black_data_folder}/cluster_is_black_ground_truth.zarr") # same file from ground truth.py file
-    # PRE-PROCESSING
 
+    # black_cluster: index-cluster, bool value-true if cluster is black. We use the same file we got from ub_ground_truth.py file
+    clust_is_black_ground = zarr.load(f"{options.black_data_folder}/cluster_is_black_ground_truth.zarr") 
+
+    # PRE-PROCESSING
     # define blocks range after given dates
     if options.start_date == None:
         start_date = datetime.fromtimestamp(chain.blocks[0].timestamp).date()
@@ -179,56 +190,144 @@ if __name__ == "__main__":
 
     # set of black users
     clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground)) # transform clust_is_black_ground into a set where we consider only black clusters.
-    clust_is_black_when = np.zeros(len(clust_is_black_ground), dtype=int) # initialize array
+    # initialize empty array
+    # clust_is_black_when = np.zeros(len(clust_is_black_ground), dtype=int) 
 
     chrono.print(message="init")
+    print(f"[CALC] Starting the grayscale diffusion for all the blockchain...")
 
-    print(f"[CALC] starts black bitcoin diffusion...")
+    clustered_nodes = set([]) # the set of all clustered nodes we have seen so far
 
     # RUN ON ALL BLOCKS
-    for b in tqdm(blocks_range): 
-        new_black_nodes = set([])
+    for block in tqdm(blocks_range):
+        # Initialize 
+        # New_black_nodes = set([])
+        current_assets = defaultdict(lambda: 0)
+        dark_assets = defaultdict(lambda: 0)
+        dark_ratio = defaultdict(lambda: 0.0)
 
-        # on a single trx
-        for trx in b.txes:
-            loc_new_black_nodes = set([]) # temporary variable as a set
+        # Initialize a graph object
+        g = Graph()
 
-            flag_input_black = False # to flag or checks if in this transaction has black input
+        #______________________________TRX level_____________________________________
 
-            if trx.is_coinbase: continue # skip mining transactions which do not have inputs but just miner output
+        for trx in block.txes:
 
-            for inp in trx.inputs: # loop over inputs which are an address
-                cluster = am.cluster[am[inp.address]]
-                # if the input is already black
-                if cluster in clust_is_black_ground_set:
-                    # if at least one of the input is black 
-                    flag_input_black = True
+            # skip mining transactions which do not have inputs but just miner output
+            if trx.is_coinbase: continue 
 
-            # if at least one input is black
-            if flag_input_black:
-                for out in trx.outputs:
-                    cluster = am.cluster[am[out.address]]
-                    if cluster not in clust_is_black_ground_set:
-                        # the cluster was not black before
-                        # add the cluster to new black nodes
-                        loc_new_black_nodes.add(cluster)
-                        # update clust_is_black_when
-                        clust_is_black_when[cluster] = b.height
+            #______________________________Initialize Variables_____________________________________
 
-            new_black_nodes.update(loc_new_black_nodes)
+            #loc_new_black_nodes = set([]) # temporary variable as a set
+            #flag_input_black = False # to flag or checks if in this transaction has black input
+            clustered_inputs_dict = defaultdict(list)
+            clustered_outputs_dict = defaultdict(list)
+            #new dictionaries
+            loc_new_clustered_nodes = set([]) # the temporary set of local clustered nodes in this trx
+            total_trx_input_value = 0
 
-        # block level
-        # update black nodes and write them
-        clust_is_black_ground_set.update(new_black_nodes)
+            # loop over trx inputs to build a reduced representation of inputs
 
-    # here the index of the array represents a cluster, and the value is the block number/ timestamp. (value for clusters that were never black should be zero)
-    zarr.save(options.output_folder + f'cluster_is_black_when_block.zarr', clust_is_black_when)
+            for inp in trx.inputs: 
+                cluster, value = am.cluster[am[inp.address]], inp.value
+
+                # if the input(address) has already been clustered
+                if cluster in list(clustered_inputs_dict.keys()):
+                    clustered_inputs_dict[cluster].append(value)
+                else:
+                    clustered_inputs_dict[cluster] = [value]
+
+                # if the input address has not been seen before globally or locally add it to loc_new_clustered_nodes
+                if cluster not in clustered_nodes.union(loc_new_clustered_nodes):
+                    loc_new_clustered_nodes.add(cluster)
+                
+                total_trx_input_value = total_trx_input_value + value
+            
+            print(f'calculating_total_trx_input_value:{total_trx_input_value}')
+            
+            # loop over trx inputs to build a reduced representation of inputs
+
+            for out in trx.outputs:
+                cluster, value = am.cluster[am[out.address]], out.value
+
+                # if the input(address) has already been clustered
+                if cluster in list(clustered_outputs_dict.keys()):
+                    clustered_outputs_dict[cluster].append(value)
+                else:
+                    clustered_outputs_dict[cluster] = [value]
+                
+                # if the input address has not been seen before globally or locally add it to loc_new_clustered_nodes
+                if cluster not in clustered_nodes.union(loc_new_clustered_nodes):
+                    loc_new_clustered_nodes.add(cluster)
+
+            clustered_nodes.update(loc_new_clustered_nodes)
+            print(f'clustered_inputs_dict:{clustered_inputs_dict}')
+            print(f'clustered_outputs_dict:{clustered_outputs_dict}')
+
+            #-------------------------------------------------------------------------------#
+            
+            for out_sender, sender_value in clustered_inputs_dict.items():
+            
+                #Set all the assets as dark assets if the cluster belongs to black ground truth
+                if out_sender in clust_is_black_ground_set:
+                    dark_assets[out_sender] = current_assets[out_sender]
+                
+                if total_trx_input_value == 0:
+                    continue
+
+                for out_receiver, receiver_value in clustered_outputs_dict.items():
+                        #Calculate the weight of the edge and add the edge to the graph
+                        weight = sum(sender_value)/total_trx_input_value*sum(receiver_value)
+                        print("*----*")
+                        print(f'out_sender:{out_sender} , sender_value:{sender_value}')
+                        print(f'out_receiver:{out_receiver} , receiver_value:{receiver_value}')
+                        print(f'total_trx_input_value:{total_trx_input_value}')
+                        print(f'weight:{weight}')
+                        g.add_edge(out_sender, out_receiver, weight)
+                        
+                        #Calculate the dark ratio of the sender
+                        
+                        if current_assets[out_sender] > 0:
+                            dark_ratio[out_sender] = dark_assets[out_sender] / current_assets[out_sender]
+
+                        #update the current assets of the sender
+                        current_assets[out_sender] = current_assets[out_sender] - weight
+
+                        #Update the current assets of the receiver
+                        current_assets[out_receiver] = current_assets[out_receiver] + weight
+
+                        #update the dark assets of the sender and receiver.
+                        dark_assets[out_sender] = dark_assets[out_sender] - (weight*dark_ratio[out_sender])
+                        dark_assets[out_receiver] = dark_assets[out_receiver]+ (weight*dark_ratio[out_sender])
+
+                        #update dark ratio of the receiver
+                        if current_assets[out_receiver] > 0:
+                            dark_ratio[out_receiver] = dark_assets[out_receiver]/current_assets[out_receiver]
+                
+                dark_ratio_arr = np.array(list(dark_ratio.values()))
+                print("123123123")
+                print(dark_ratio_arr)
+                #zarr.save(options.output_folder + f'dark_ratio_block_{block.height}.zarr', dark_ratio_arr) 
+
+        print(block)
+        print(g.graph_size())
+        g.print_graph()
+        print(f'size of clustered_nodes:{len(clustered_nodes)}')
+        #print(f'clustered_nodes:{clustered_nodes}')
+        print("____________________________________________________________________________________________________________________________________________")
+
+        #if block.height < 10000:
+            
+            #print(clustered_outputs_dict)
+            #print(total_trx_input_value)
+
+        if block.height == 50000:
+            # print(block)
+            # print(clustered_nodes)
+            #print(clustered_outputs_dict)
+            #print(total_trx_input_value)
+            break
 
     chrono.print(message="took", tic="last")
-
-
-
-   # addr_no_input_tx = zarr.load(f"{options.data_in_folder}/cluster_no_input_tx.zarr")
-   # addr_no_output_tx = zarr.load(f"{options.data_in_folder}/cluster_no_output_tx.zarr")
 
 
