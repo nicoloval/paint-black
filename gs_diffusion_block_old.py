@@ -10,9 +10,11 @@ outputs:
 # here in this script we replicate the diffusion and from ground-truth we see how users turn black block by block
 
 import blocksci
+from decimal import Decimal
 
 import sys, os, os.path, socket
 import numpy as np
+np.set_printoptions(threshold=sys.maxsize)
 import networkx as nx
 import zarr
 import time
@@ -27,7 +29,9 @@ from collections import defaultdict
 
 from util import SYMBOLS, DIR_BCHAIN, DIR_PARSED, SimpleChrono
 
-
+def format_e(n):
+    a = '%E' % n
+    return a.split('E')[0].rstrip('0').rstrip('.') + 'E' + a.split('E')[1]
 
 def parse_command_line():
     import sys, optparse
@@ -101,7 +105,6 @@ class AddressMapper(): # same as before
 
 
     def map_clusters(self,cm):
-#        address_vector = {_: np.zeros(self.__counter_addresses[_], dtype=np.int64) for _ in self.__address_types }
         cluster_vector = {_: np.zeros(self.__counter_addresses[_], dtype=np.int64) for _ in self.__address_types }
 
         self.cluster = np.zeros(self.total_addresses, dtype=np.int64)
@@ -109,13 +112,8 @@ class AddressMapper(): # same as before
         for _at in cluster_vector.keys():
             clusters = cluster_vector[_at]
             print(f"{_at}     -  {len(clusters)}")
-#            addrs = address_vector[_at]
             for _i, _add in enumerate(chain.addresses(_at)):
-#                addrs[_i] = _add.address_num
                 clusters[_i] = cm.cluster_with_address(_add).index
-                #max_addr_num = max(max_addr_num, addrs[_i])
-#        pickle.dump(cluster_vector, open("cluster_dict.pickle","wb"))
-
         offset = 0
         for _ in cluster_vector.keys():
             v = cluster_vector[_]
@@ -129,16 +127,6 @@ class AddressMapper(): # same as before
             os.mkdir(output_folder)
         zarr.save(f"{output_folder}/address_cluster_map.zarr", self.cluster)
 
-
-#    def dump_offsets(self, output_folder):
-#        if not os.path.exists(output_folder):
-#            os.mkdir(output_folder)
-#        pickle.dump(self.__offsets, open(f"{output_folder}/offsets.pickle", "wb") )
-
-#    def load_offsets(self, output_folder):
-#        if not os.path.exists(output_folder):
-#            os.mkdir(output_folder)
-#        self.__offsets = pickle.load( open(f"{output_folder}/offsets.pickle", "rb") )
 
     def load_clusters(self, input_folder):
         self.cluster = zarr.load(f"{input_folder}/address_cluster_map.zarr")
@@ -171,20 +159,18 @@ class Graph:
         
         for source, destination in self.graph.items():
             print(f"{source}->{destination}")
+    
+    def graph_size(self):
+        return len(self.graph)
 
 if __name__ == "__main__":
     options, args = parse_command_line()
-
-    # heur_file   = zarr.open_array(f"{options.cluster_folder}_data/address_cluster_map.zarr", mode = 'r')
-    # memstore    = zarr.MemoryStore()
-    # zarr.copy_store(heur_file.store, memstore)
-    # heur_mem    = zarr.open_array(memstore)
 
     # Start Chrono
     chrono = SimpleChrono()
 
     # Load chain and initialize address mapper
-    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg")
+    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_old.cfg")
     am = AddressMapper(chain)
     am.load_clusters(f"{options.cluster_data_folder}")
 
@@ -207,25 +193,61 @@ if __name__ == "__main__":
 
     # set of black users
     clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground)) # transform clust_is_black_ground into a set where we consider only black clusters.
-    clust_is_black_when = np.zeros(len(clust_is_black_ground), dtype=int) # initialize empty array
+    # initialize empty array
+    # clust_is_black_when = np.zeros(len(clust_is_black_ground), dtype=int) 
 
     chrono.print(message="init")
-    print(f"[CALC] starts black bitcoin diffusion...")
+    print(f"[CALC] Starting the grayscale diffusion for all the blockchain...")
 
-    #Initialize a graph object
-    g = Graph()
+    clustered_nodes = set([]) # the set of all clustered nodes we have seen so far
+    clustered_nodes_total_balance = defaultdict(lambda: 0)
+
+    # New_black_nodes = set([])
+    current_assets = defaultdict(lambda: 0)
+    dark_assets = defaultdict(lambda: 0)
+    dark_ratio = defaultdict(lambda: 0.0)
+    loop = 0
 
     # RUN ON ALL BLOCKS
     for block in tqdm(blocks_range):
-        new_black_nodes = set([])
-        clustered_nodes = set([]) # the set of all clustered nodes we have seen so far
+        # Initialize 
+        
+        print(f'current_assets before block has started:{block.height}')
+        i = 0
+        for k, v in current_assets.items():
+            print(f'{k}:{format_e(Decimal(v))}, ', end='')
+            if i == 9:
+                print('\n')
+                i = 0
+            i+=1
+        
+        print('\n')
+
+        print(f'dark_assets before block has started:{block.height}')
+        i = 0
+        for k, v in dark_assets.items():
+            print(f'{k}:{format_e(Decimal(v))}, ', end='')
+            if i == 9:
+                print('\n')
+                i = 0
+            i+=1
+        
+        print('\n')
+
+        # Initialize a graph object
+        g = Graph()
+
+        trx_is_dark = False 
 
         #______________________________TRX level_____________________________________
 
         for trx in block.txes:
 
             # skip mining transactions which do not have inputs but just miner output
-            if trx.is_coinbase: continue 
+            # if trx.is_coinbase: continue
+
+            # Is transaction dark ?
+            
 
             #______________________________Initialize Variables_____________________________________
 
@@ -234,81 +256,167 @@ if __name__ == "__main__":
             clustered_inputs_dict = defaultdict(list)
             clustered_outputs_dict = defaultdict(list)
             #new dictionaries
+            #loc_clustered_nodes_total_balance = defaultdict(lambda: 0)
             loc_new_clustered_nodes = set([]) # the temporary set of local clustered nodes in this trx
             total_trx_input_value = 0
 
             # loop over trx inputs to build a reduced representation of inputs
-
+            if True:
+                print(f'printing inputs for trx:{trx}')
             for inp in trx.inputs: 
-                cluster = am.cluster[am[inp.address]]
-                value = inp.value
+                cluster, value = am.cluster[am[inp.address]], inp.value
+
+                if cluster in clust_is_black_ground_set:
+                    trx_is_dark = True
+
+                if True:
+                    print(f'input cluster:{cluster}, value:{value}')
 
                 # if the input(address) has already been clustered
                 if cluster in list(clustered_inputs_dict.keys()):
                     clustered_inputs_dict[cluster].append(value)
+                    current_assets[cluster] = current_assets[cluster] + value
+                    
                 else:
                     clustered_inputs_dict[cluster] = [value]
+                    current_assets[cluster] = value
 
                 # if the input address has not been seen before globally or locally add it to loc_new_clustered_nodes
                 if cluster not in clustered_nodes.union(loc_new_clustered_nodes):
                     loc_new_clustered_nodes.add(cluster)
-                
-                total_trx_input_value += value
-
+                    
+                total_trx_input_value = total_trx_input_value + value
+            
             # loop over trx inputs to build a reduced representation of inputs
 
+            
             for out in trx.outputs:
-                cluster = am.cluster[am[inp.address]]
-                value = out.value
+                cluster, value = am.cluster[am[out.address]], out.value
+
+                if cluster in clust_is_black_ground_set:
+                    trx_is_dark = True
+                   
+                if True:
+                    print(f'Result_total_trx_input_value:{total_trx_input_value} for trx index:{trx.index}')
+                    print(f'printing outputs for trx:{trx}')
+                    print(f'output cluster:{cluster}, value:{value}')
+                    
 
                 # if the input(address) has already been clustered
                 if cluster in list(clustered_outputs_dict.keys()):
                     clustered_outputs_dict[cluster].append(value)
+                    #loc_clustered_nodes_total_balance[cluster] = loc_clustered_nodes_total_balance[cluster] + value
                 else:
                     clustered_outputs_dict[cluster] = [value]
+                    #loc_clustered_nodes_total_balance[cluster] = [value]
                 
                 # if the input address has not been seen before globally or locally add it to loc_new_clustered_nodes
                 if cluster not in clustered_nodes.union(loc_new_clustered_nodes):
                     loc_new_clustered_nodes.add(cluster)
-            
-            for out_sender, sender_value in clustered_inputs_dict.items():
-                if total_trx_input_value == 0:
-                    continue
-                for out_receiver, receiver_value in clustered_outputs_dict.items():
-                        g.add_edge(out_sender, out_receiver, sum(sender_value)/total_trx_input_value*sum(receiver_value))
 
             clustered_nodes.update(loc_new_clustered_nodes)
+            if True:
+                print("----------Clustered inputs and outputs----------")
+                print(f'clustered_inputs_dict:{clustered_inputs_dict}')
+                print(f'clustered_outputs_dict:{clustered_outputs_dict}')
 
-            #print(block)
-            #print(trx)
-            #print(trx)
-            #print(clustered_inputs_dict)
-            #print(clustered_outputs_dict) 
-
-
-        print(block)
-        #print(clustered_nodes)
-        g.print_graph()
-        
-        print("____________________________________________________________________________________________________________________________________________")
-
-        #if block.height < 10000:
+            #-------------------------------------------------------------------------------#
             
-            #print(clustered_outputs_dict)
-            #print(total_trx_input_value)
+            for out_sender, sender_value in clustered_inputs_dict.items():
+            
+                #Set all the assets as dark assets if the cluster belongs to black ground truth
+                if out_sender in clust_is_black_ground_set:
+                    dark_assets[out_sender] = current_assets[out_sender]
+                    dark_ratio[out_sender] = 1
+                    print(f'{out_sender} is a black node')
+                
+                if total_trx_input_value == 0:
+                    continue
 
-        if block.height == 1000000:
-            # print(block)
-            # print(clustered_nodes)
-            #print(clustered_outputs_dict)
-            #print(total_trx_input_value)
+                for out_receiver, receiver_value in clustered_outputs_dict.items():
+
+                    if out_receiver in clust_is_black_ground_set:
+                        dark_assets[out_receiver] = current_assets[out_receiver]
+                        dark_ratio[out_receiver] = 1
+                        print(f'{out_receiver} is a black node')
+
+                    #Calculate the weight of the edge and add the edge to the graph
+                    weight = sum(sender_value)/total_trx_input_value*sum(receiver_value)
+
+                    if True:
+                        print("----------Graph building and weight calculation----------")
+                        print(f'out_sender:{out_sender} , sender_value:{sender_value}')
+                        print(f'out_receiver:{out_receiver} , receiver_value:{receiver_value}')
+                        print(f'sum(sender_value):{sum(sender_value)} , sum(receiver_value):{sum(receiver_value)}')
+                        print(f'total_trx_input_value:{total_trx_input_value}')
+                        print(f'weight:{weight}')
+
+                    g.add_edge(out_sender, out_receiver, weight)
+                    
+                    #Calculate the dark ratio of the sender
+                    
+                    if current_assets[out_sender] > 0:
+                        dark_ratio[out_sender] = dark_assets[out_sender] / current_assets[out_sender]
+
+                    #update the current assets of the sender
+                    current_assets[out_sender] = current_assets[out_sender] - weight
+
+                    #Update the current assets of the receiver
+                    current_assets[out_receiver] = current_assets[out_receiver] + weight
+
+                    #update the dark assets of the sender and receiver.
+                    dark_assets[out_sender] = dark_assets[out_sender] - (weight*dark_ratio[out_sender])
+                    dark_assets[out_receiver] = dark_assets[out_receiver]+ (weight*dark_ratio[out_sender])
+
+                    #update dark ratio of the receiver
+                    if current_assets[out_receiver] > 0:
+                        dark_ratio[out_receiver] = dark_assets[out_receiver]/current_assets[out_receiver]
+        
+        if True:
+            loop = 0
+            print(f'----------Results for block:{block.height}----------')
+            print(f'current_assets after block has finished:{block.height}')
+            i = 0
+            for k, v in current_assets.items():
+                print(f'{k}:{format_e(Decimal(v))}, ', end='')
+                if i == 9:
+                    print('\n')
+                    i = 0
+                i+=1
+                
+            print('\n')
+
+            print(f'dark_assets after block has finished:{block.height}')
+            i = 0
+            for k, v in dark_assets.items():
+                print(f'{k}:{format_e(Decimal(v))}, ', end='')
+                if i == 9:
+                    print('\n')
+                    i = 0
+                i+=1
+            
+            print('\n')
+
+            # print(f'current_assets_arr:{current_assets_arr}')
+            # print(f'current_assets_arr_index:{current_assets_arr_index}')
+            print(f'current_assets size:{len(current_assets)}')
+            #print(f'dark_ratio_arr:{dark_ratio_arr}')
+            print(f'dark_ratio_arr size:{len(dark_ratio)}')
+            #zarr.save(options.output_folder + f'dark_ratio_block_{block.height}.zarr', dark_ratio_arr) 
+
+            
+            print(f'g.graph size:{g.graph_size()}')
+            g.print_graph()
+            print(f'size of clustered_nodes:{len(clustered_nodes)}')
+            #print(f'clustered_nodes:{clustered_nodes}')
+            print(block)
+            print("____________________________________________________________________________________________________________________________________________")
+        
+        loop += 1
+
+        if block.height == 50000:
             break
 
     chrono.print(message="took", tic="last")
-
-
-
-   # addr_no_input_tx = zarr.load(f"{options.data_in_folder}/cluster_no_input_tx.zarr")
-   # addr_no_output_tx = zarr.load(f"{options.data_in_folder}/cluster_no_output_tx.zarr")
 
 
