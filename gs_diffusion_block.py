@@ -257,9 +257,9 @@ if __name__ == "__main__":
                 for out in trx.outputs:
                     cluster, value = am.cluster[am[out.address]], out.value + trx.fee
                     
-                    if True:
-                        print(f'printing outputs for trx:{trx}')
-                        print(f'output cluster:{cluster}, value:{value}')
+                    # if not trx.is_coinbase:
+                    #     print(f'printing outputs for trx:{trx}')
+                    #     print(f'output cluster:{cluster}, value:{value}')
                         
                     # if the input(address) has already been clustered
                     if cluster in list(current_assets.keys()):
@@ -280,16 +280,16 @@ if __name__ == "__main__":
                     continue
             
             # loop over trx inputs to build a reduced representation of inputs
-            if not trx.is_coinbase:
-                print(f'printing inputs for trx:{trx}')
+            # if not trx.is_coinbase:
+            #     print(f'printing inputs for trx:{trx}')
             for inp in trx.inputs: 
                 cluster, value = am.cluster[am[inp.address]], inp.value
 
                 if cluster in clust_is_black_ground_set:
                     trx_is_dark = True
 
-                if not trx.is_coinbase:
-                    print(f'input cluster:{cluster}, value:{value}')
+                # if not trx.is_coinbase:
+                #     print(f'input cluster:{cluster}, value:{value}')
 
                 # if the input(address) has already been clustered
                 if cluster in list(clustered_inputs_dict.keys()):
@@ -315,10 +315,10 @@ if __name__ == "__main__":
                 if cluster in clust_is_black_ground_set:
                     trx_is_dark = True
                    
-                if not trx.is_coinbase:
-                    print(f'Result_total_trx_input_value:{total_trx_input_value} for trx index:{trx.index}')
-                    print(f'printing outputs for trx:{trx}')
-                    print(f'output cluster:{cluster}, value:{value}')
+                # if not trx.is_coinbase:
+                #     print(f'Result_total_trx_input_value:{total_trx_input_value} for trx index:{trx.index}')
+                #     print(f'printing outputs for trx:{trx}')
+                #     print(f'output cluster:{cluster}, value:{value}')
                     
 
                 # if the input(address) has already been clustered
@@ -332,10 +332,10 @@ if __name__ == "__main__":
                     loc_new_clustered_nodes.add(cluster)
 
             clustered_nodes.update(loc_new_clustered_nodes)
-            if not trx.is_coinbase:
-                print("----------Clustered inputs and outputs----------")
-                print(f'clustered_inputs_dict:{clustered_inputs_dict}')
-                print(f'clustered_outputs_dict:{clustered_outputs_dict}')
+            # if not trx.is_coinbase:
+            #     print("----------Clustered inputs and outputs----------")
+            #     print(f'clustered_inputs_dict:{clustered_inputs_dict}')
+            #     print(f'clustered_outputs_dict:{clustered_outputs_dict}')
 
             #-------------------------------------------------------------------------------#
             
@@ -346,7 +346,7 @@ if __name__ == "__main__":
                 if out_sender in clust_is_black_ground_set:
                     dark_assets[out_sender] = current_assets[out_sender]
                     dark_ratio[out_sender] = 1
-                    print(f'{out_sender} is a black node')
+                    # print(f'{out_sender} is a black node')
                 
                 if total_trx_input_value == 0:
                     continue
@@ -356,18 +356,18 @@ if __name__ == "__main__":
                     if out_receiver in clust_is_black_ground_set:
                         dark_assets[out_receiver] = current_assets[out_receiver]
                         dark_ratio[out_receiver] = 1
-                        print(f'{out_receiver} is a black node')
+                        # print(f'{out_receiver} is a black node')
 
-                    #Calculate the weight of the edge and add the edge to the graph
+                    # Calculate the weight of the edge and add the edge to the graph
                     weight = sum(sender_value)/total_trx_input_value*sum(receiver_value)
 
-                    if not trx.is_coinbase:
-                        print("----------Graph building and weight calculation----------")
-                        print(f'out_sender:{out_sender} , sender_value:{sender_value}')
-                        print(f'out_receiver:{out_receiver} , receiver_value:{receiver_value}')
-                        print(f'sum(sender_value):{sum(sender_value)} , sum(receiver_value):{sum(receiver_value)}')
-                        print(f'total_trx_input_value:{total_trx_input_value}')
-                        print(f'weight:{weight}')
+                    # if not trx.is_coinbase:
+                    #     print("----------Graph building and weight calculation----------")
+                    #     print(f'out_sender:{out_sender} , sender_value:{sender_value}')
+                    #     print(f'out_receiver:{out_receiver} , receiver_value:{receiver_value}')
+                    #     print(f'sum(sender_value):{sum(sender_value)} , sum(receiver_value):{sum(receiver_value)}')
+                    #     print(f'total_trx_input_value:{total_trx_input_value}')
+                    #     print(f'weight:{weight}')
 
                     g.add_edge(out_sender, out_receiver, weight)
                     
@@ -390,56 +390,71 @@ if __name__ == "__main__":
                     if current_assets[out_receiver] > 0:
                         dark_ratio[out_receiver] = dark_assets[out_receiver]/current_assets[out_receiver]
         
-        if not trx.is_coinbase:
-            loop = 0
-            print(f'----------Results for block:{block.height}----------')
-            print(f'current_assets after block has finished:{block.height}')
-            i = 0
-            for k, v in current_assets.items():
-                print(f'{k}:{format_e(v)}, ', end='')
-                if i == 9:
-                    print('\n')
-                    i = 0
-                i+=1
+        # os.chdir('/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/')
+        # print("Current working directory before")
+        # print(os.getcwd())
+        # print(block)
+        # dark_ratio_arr = np.array(list(dark_ratio.values()))
+        # dark_assets_arr = np.array(list(dark_assets.values()))
+        # current_assets_arr = np.array(list(current_assets.values()))
+        # zarr.save("heur_1_data/dark_ratio/" + f'dark_ratio_block_{i}.zarr', dark_ratio_arr)
+        # zarr.save("heur_1_data/dark_assets/" + f'dark_assets_arr_block_{i}.zarr', dark_assets_arr)
+        # zarr.save("heur_1_data/current_assets/" + f'current_assets_block_{i}.zarr', current_assets_arr)
+        np.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data/dark_ratio/" + f'dark_ratio_block_{block.height}.npy', np.array(dict(dark_ratio)))
+        np.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data/dark_assets/" + f'dark_assets_block_{block.height}.npy', np.array(dict(dark_assets)))
+        np.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data/current_assets/" + f'current_assets_block_{block.height}.npy', np.array(dict(current_assets)))
+
+        # if not trx.is_coinbase:
+        #     loop = 0
+        #     print(f'----------Results for block:{block.height}----------')
+        #     print(f'current_assets after block has finished:{block.height}')
+        #     i = 0
+        #     for k, v in current_assets.items():
+        #         print(f'{k}:{format_e(v)}, ', end='')
+        #         if i == 9:
+        #             print('\n')
+        #             i = 0
+        #         i+=1
                 
-            print('\n')
+        #     print('\n')
 
-            print(f'dark_assets after block has finished:{block.height}')
-            i = 0
-            for k, v in dark_assets.items():
-                print(f'{k}:{format_e(v)}, ', end='')
-                if i == 9:
-                    print('\n')
-                    i = 0
-                i+=1
+        #     print(f'dark_assets after block has finished:{block.height}')
+        #     i = 0
+        #     for k, v in dark_assets.items():
+        #         print(f'{k}:{format_e(v)}, ', end='')
+        #         if i == 9:
+        #             print('\n')
+        #             i = 0
+        #         i+=1
             
-            print('\n')
+        #     print('\n')
 
-            print(f'dark_ratio after block has finished:{block.height}')
-            i = 0
-            for k, v in dark_ratio.items():
-                print(f'{k}:{format_e(v)}, ', end='')
-                if i == 9:
-                    print('\n')
-                    i = 0
-                i+=1
+        #     print(f'dark_ratio after block has finished:{block.height}')
+        #     i = 0
+        #     for k, v in dark_ratio.items():
+        #         print(f'{k}:{format_e(v)}, ', end='')
+        #         if i == 9:
+        #             print('\n')
+        #             i = 0
+        #         i+=1
             
-            print('\n')
+        #     print('\n')
 
-            print(f'g.graph size:{g.graph_size()}')
-            g.print_graph()
-            print(f'current_assets size:{len(current_assets)}')
-            print(f'dark_ratio size:{len(dark_ratio)}')
-            print(f'size of clustered_nodes:{len(clustered_nodes)}')
-            #zarr.save(options.output_folder + f'dark_ratio_block_{block.height}.zarr', dark_ratio_arr) 
-            #print(f'clustered_nodes:{clustered_nodes}')
-            print(block)
-            print("____________________________________________________________________________________________________________________________________________")
+        #     print(f'g.graph size:{g.graph_size()}')
+        #     g.print_graph()
+        #     print(f'current_assets size:{len(current_assets)}')
+        #     print(f'dark_ratio size:{len(dark_ratio)}')
+        #     print(f'size of clustered_nodes:{len(clustered_nodes)}')
+        #     #zarr.save(options.output_folder + f'dark_ratio_block_{block.height}.zarr', dark_ratio_arr) 
+            
+        #     #print(f'clustered_nodes:{clustered_nodes}')
+        #     print(block)
+        #     print("____________________________________________________________________________________________________________________________________________")
         
-        loop += 1
+        # # loop += 1
 
-        if block.height == 49996:
-            break
+        # if block.height == 49996:
+        #     break
 
     chrono.print(message="took", tic="last")
 
