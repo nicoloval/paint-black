@@ -394,15 +394,21 @@ if __name__ == "__main__":
         # print("Current working directory before")
         # print(os.getcwd())
         # print(block)
-        # dark_ratio_arr = np.array(list(dark_ratio.values()))
-        # dark_assets_arr = np.array(list(dark_assets.values()))
-        # current_assets_arr = np.array(list(current_assets.values()))
-        # zarr.save("heur_1_data/dark_ratio/" + f'dark_ratio_block_{i}.zarr', dark_ratio_arr)
-        # zarr.save("heur_1_data/dark_assets/" + f'dark_assets_arr_block_{i}.zarr', dark_assets_arr)
-        # zarr.save("heur_1_data/current_assets/" + f'current_assets_block_{i}.zarr', current_assets_arr)
-        np.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data/dark_ratio/" + f'dark_ratio_block_{block.height}.npy', np.array(dict(dark_ratio)))
-        np.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data/dark_assets/" + f'dark_assets_block_{block.height}.npy', np.array(dict(dark_assets)))
-        np.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data/current_assets/" + f'current_assets_block_{block.height}.npy', np.array(dict(current_assets)))
+
+        #dark_assets_arr = np.array(list(dark_assets.values()))
+        current_assets_values = np.array(list(current_assets.values()))
+        dark_ratio_values = np.array(list(dark_ratio.values()))
+        current_assets_index = np.array(list(current_assets.keys()))
+        dark_ratio_index = np.array(list(dark_ratio.keys()))
+
+        zarr.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_zarr/dark_ratio/" + f'dark_ratio_values_block_{str(block.height).zfill(6)}.zarr', dark_ratio_values)
+        #zarr.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_zarr/dark_assets/" + f'dark_assets_block_{str(block.height).zfill(6)}.zarr', dark_assets_arr)
+        zarr.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_zarr/current_assets/" + f'current_assets_values_block_{str(block.height).zfill(6)}.zarr', current_assets_values)
+        zarr.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_zarr/current_assets_index/" + f'current_assets_index_block_{str(block.height).zfill(6)}.zarr', current_assets_index)
+        zarr.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_zarr/dark_assets_index/" + f'dark_ratio_index_block_{str(block.height).zfill(6)}.zarr', dark_ratio_index)
+        # np.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data/dark_ratio/" + f'dark_ratio_block_{str(block.height).zfill(6)}.npy', np.array(dict(dark_ratio)))
+        # np.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data/dark_assets/" + f'dark_assets_block_{str(block.height).zfill(6)}.npy', np.array(dict(dark_assets)))
+        # np.save("/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data/current_assets/" + f'current_assets_block_{str(block.height).zfill(6)}.npy', np.array(dict(current_assets)))
 
         # if not trx.is_coinbase:
         #     loop = 0
