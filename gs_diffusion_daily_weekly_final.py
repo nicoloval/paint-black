@@ -27,9 +27,6 @@ from scipy.sparse import csc_matrix
 from collections import defaultdict
 import logging
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="logfile", filemode="a+",
-                        format="%(asctime)-15s %(levelname)-8s %(message)s")
 
 from util import SYMBOLS, DIR_BCHAIN, DIR_PARSED, SimpleChrono
 
@@ -132,58 +129,14 @@ class AddressMapper(): # same as before
     def __getitem__(self,addr):
         return self.__offsets[addr.raw_type]+ addr.address_num-1
 
-def g_add_trx(inp,outp, value):
-
-    if inp == outp: return
-
-    if g.has_edge(inp,outp):
-#        if outp in trxOuts: #for the same trx we create only 1 edge
-#            # more outputs of the same cluster = 1 edge: update only the value
-#            g[inp][outp]['value'] = g[inp][outp]['value'] + value
-#        else:
-            # update existing edge summing current value and raising number of transaction (n_tx)
-            g[inp][outp]['value'] = g[inp][outp]['value'] + value
-            g[inp][outp]['n_tx']  = g[inp][outp]['n_tx']  + 1
-         #   trxOuts.add(outp)
-    else:
-        # creating new edge
-        #if inp != outp:
-            g.add_edge(inp,outp)
-            g[inp][outp]['value'] = value
-            g[inp][outp]['n_tx']  = 1
-         #   trxOuts.add(outp)
-
 def daterange(date1, date2, by=1):
     return [  date1 + timedelta(n) for n in range(0, int((date2 - date1).days)+1, by) ]
 
-class Graph:
-    
-    def __init__(self):
-        self.graph = dict()
-        
-        
-    def add_edge(self, node1, node2, cost):
-        if node1 not in self.graph:
-            self.graph[node1] = []
-            
-        if node2 not in self.graph:
-            self.graph[node2] = []
-        
-        self.graph[node1].append((node2, int(cost)))
-        
-        if len(self.graph[node1]) == 0:
-            self.graph.pop(node1)
-        
-    def print_graph(self):
-        
-        for source, destination in self.graph.items():
-            print(f"{source}->{destination}")
-    
-    def graph_size(self):
-        return len(self.graph)
-
 if __name__ == "__main__":
+
     options, args = parse_command_line()
+
+    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/logfile_daily_weekly_final_heur_{options.heuristic}", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
 
     # Start Chrono
     chrono = SimpleChrono()
@@ -207,190 +160,173 @@ if __name__ == "__main__":
     else:
         end_date = datetime.strptime(options.end_date, "%Y-%m-%d").date()
 
+    print(f'start_date is set as: {start_date}')
+    print(f'end_date is set as: {end_date}')
     weeksList = daterange(start_date, end_date, by=7)
     
-    blocks_list = chain.range(start_date, end_date)
+    # blocks_list = chain.range(start_date, end_date)
+
+    tqdm_bar = tqdm(weeksList, desc="processed files")
 
     # set of black users
     clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground)) # transform clust_is_black_ground into a set where we consider only black clusters.
 
-    current_assets = defaultdict(lambda: 0)
-    dark_assets = defaultdict(lambda: 0)
-    dark_ratio = defaultdict(lambda: 0.0)
-    loop = 0
+    if options.start_date != None:
+        savedDataLocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data/weekly/"
+
+        current_assets_zarr = zarr.load(savedDataLocation + f'current_assets/current_assets_values_{start_date.strftime("%Y-%m-%d")}.zarr')
+        current_assets_index_zarr = zarr.load(savedDataLocation + f'current_assets_index/current_assets_index_{start_date.strftime("%Y-%m-%d")}.zarr')
+        current_assets = defaultdict(lambda: 0, dict(zip(current_assets_index_zarr, current_assets_zarr)))
+
+        dark_assets_zarr = zarr.load(savedDataLocation + f'dark_assets/dark_assets_values_{start_date.strftime("%Y-%m-%d")}.zarr')
+        dark_assets_index_zarr = zarr.load(savedDataLocation + f'dark_assets_index/dark_assets_index_{start_date.strftime("%Y-%m-%d")}.zarr')
+        dark_assets = defaultdict(lambda: 0, dict(zip(dark_assets_index_zarr, dark_assets_zarr)))
+
+        dark_ratio_zarr = zarr.load(savedDataLocation + f'dark_ratio/dark_ratio_values_{start_date.strftime("%Y-%m-%d")}.zarr')
+        dark_ratio_index_zarr = zarr.load(savedDataLocation + f'dark_ratio_index/dark_ratio_index_{start_date.strftime("%Y-%m-%d")}.zarr')
+        dark_ratio = defaultdict(lambda: 0.0, dict(zip(dark_ratio_index_zarr, dark_ratio_zarr)))
+    else:
+        current_assets = defaultdict(lambda: 0)
+        dark_assets = defaultdict(lambda: 0)
+        dark_ratio = defaultdict(lambda: 0.0)
+
 
     chrono.print(message="init")
     print(f"[CALC] Starting the grayscale diffusion for all the blockchain...")
 
     #
-    for week in tqdm(weeksList, desc="processed weeks"):
+    for week in tqdm_bar:
+        chrono.add_tic("net")
         weekrange = [week, week + timedelta(days=7)]
         try:
             daysList = daterange(weekrange[0], weekrange[1], by=1)
         except:
             print(weekrange[0], weekrange[1], "cannot be processed")
             continue
-    # RUN ON Days range
+
+        skip_last_day = 0
+        # RUN ON Days range
         for day in daysList:
+            if skip_last_day == 7: # ensure a 7 day week
+                continue
+
             dayrange = [day, day + timedelta(days=1)]
             try:
                 dayblocks = chain.range(dayrange[0], dayrange[1])
             except:
                 print(dayrange[0], dayrange[1], "cannot be processed")
                 continue
-            
-            # Initialize a graph object
-            g = nx.DiGraph()
 
             for block in dayblocks:
-
-                trx_is_dark = False 
-
+                # set of clusters who happeared in the current block
+                block_clusters = set()
                 #______________________________TRX level_____________________________________
 
                 for trx in block.txes:
                     #______________________________Initialize Variables_____________________________________
 
-                    #flag_input_black = False # to flag or checks if in this transaction has black input
-                    clustered_inputs_dict = defaultdict(list)
-                    clustered_outputs_dict = defaultdict(list)
+                    # 
+                    clustered_inputs_dict = defaultdict(lambda: 0)
+                    clustered_outputs_dict = defaultdict(lambda: 0)
                     
                     total_trx_input_value = 0
+                    weight = defaultdict(dict)
 
-                    # skip mining transactions which do not have inputs but just miner output?
+                    # if coinbase generate save reward in assets
                     if trx.is_coinbase:
 
                         for out in trx.outputs:
                             cluster, value = am.cluster[am[out.address]], out.value
                                 
-                            # if the input(address) has already been clustered
-                            if cluster in list(current_assets.keys()):
-                                current_assets[cluster] = current_assets[cluster] + value
-                                if current_assets[cluster] > 0:
-                                    dark_ratio[cluster] = dark_assets[cluster]/current_assets[cluster]
-                            else:
-                                current_assets[cluster] = value
-                                if current_assets[cluster] > 0:
-                                    dark_ratio[cluster] = dark_assets[cluster]/current_assets[cluster]
-                            
-                            continue
-                    
-                    # loop over trx inputs to build a reduced representation of inputs
-                    for inp in trx.inputs: 
-                        cluster, value = am.cluster[am[inp.address]], inp.value
-
-                        if cluster in clust_is_black_ground_set:
-                            trx_is_dark = True
-
-                        # if the input(address) has already been clustered
-                        if cluster in list(clustered_inputs_dict.keys()):
-                            clustered_inputs_dict[cluster].append(value)
-                            
-                        else:
-                            clustered_inputs_dict[cluster] = [value]
-                            
-                        total_trx_input_value = total_trx_input_value + value
-                    
-                    # loop over trx inputs to build a reduced representation of inputs
-
-                    
-                    for out in trx.outputs:
-                        cluster, value = am.cluster[am[out.address]], out.value
-
-                        if cluster in clust_is_black_ground_set:
-                            trx_is_dark = True
-                            
-
-                        # if the input(address) has already been clustered
-                        if cluster in list(clustered_outputs_dict.keys()):
-                            clustered_outputs_dict[cluster].append(value)
-                        else:
-                            clustered_outputs_dict[cluster] = [value]
-                    
-
-                    for out_sender, sender_value in clustered_inputs_dict.items():
-                    
-                        #Set all the assets as dark assets if the cluster belongs to black ground truth
-                        if out_sender in clust_is_black_ground_set:
-                            dark_assets[out_sender] = current_assets[out_sender]
-                            dark_ratio[out_sender] = 1
-                            # print(f'{out_sender} is a black node')
+                            # current asset is a default dict
+                            # if it's the first time it happears,
+                            # it starts from zero
+                            # ai[b] += mi[b]
+                            current_assets[cluster] += value
+                            block_clusters.add(cluster)
+                    else:
+                        # loop over trx inputs to build a reduced representation of inputs
+                        for inp in trx.inputs:
+                            cluster, value = am.cluster[am[inp.address]], inp.value
+                            clustered_inputs_dict[cluster] += value
+                            total_trx_input_value += value
                         
+                        # loop over trx outputs to build a reduced representation of inputs
+                        for out in trx.outputs:
+                            cluster, value = am.cluster[am[out.address]], out.value
+                            clustered_outputs_dict[cluster] += value
+
+                        # loop trought all inputs and all outputs to find wij
+                        for out_sender, sender_value in clustered_inputs_dict.items():
+                        
+                            if total_trx_input_value == 0:
+                                continue
+
+                            for out_receiver, receiver_value in clustered_outputs_dict.items():
+                                # Calculate the weight of the edge and add the edge to the graph
+                                weight[out_sender][out_receiver] = sender_value/total_trx_input_value*receiver_value
+
+                    # once we computed all the weights, we can finally compute the new assets
+                    for out_sender, sender_value in clustered_inputs_dict.items():
                         if total_trx_input_value == 0:
                             continue
 
+                        block_clusters.add(out_sender)
                         for out_receiver, receiver_value in clustered_outputs_dict.items():
 
-                            if out_receiver in clust_is_black_ground_set:
-                                dark_assets[out_receiver] = current_assets[out_receiver]
-                                dark_ratio[out_receiver] = 1
-                                # print(f'{out_receiver} is a black node')
-
-                            # Calculate the weight of the edge and add the edge to the graph
-                            weight = sum(sender_value)/total_trx_input_value*sum(receiver_value)
-
-                            g_add_trx(out_sender,out_receiver, weight)
-                            
-                            #Calculate the dark ratio of the sender
-                            
-                            if current_assets[out_sender] > 0:
-                                dark_ratio[out_sender] = dark_assets[out_sender] / current_assets[out_sender]
-
-                            #update the current assets of the sender
-                            current_assets[out_sender] = current_assets[out_sender] - weight
-
-                            #Update the current assets of the receiver
-                            current_assets[out_receiver] = current_assets[out_receiver] + weight
-
-                            #update the dark assets of the sender and receiver.
-                            dark_assets[out_sender] = dark_assets[out_sender] - (weight*dark_ratio[out_sender])
-                            dark_assets[out_receiver] = dark_assets[out_receiver]+ (weight*dark_ratio[out_sender])
-
-                            #update dark ratio of the receiver and receiver
-                            if current_assets[out_receiver] > 0:
-                                dark_ratio[out_receiver] = dark_assets[out_receiver]/current_assets[out_receiver]
-                            
-                            if current_assets[out_sender] > 0:
-                                dark_ratio[out_sender] = dark_assets[out_sender]/current_assets[out_sender]
-
-                # Initialize and save per block
-                current_assets_values = np.array(list(current_assets.values()))
-                dark_ratio_values = np.array(list(dark_ratio.values()))
-                current_assets_index = np.array(list(current_assets.keys()))
-                dark_ratio_index = np.array(list(dark_ratio.keys()))
-
-                savelocation = "/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_final/blocks/"
-                zarr.save(savelocation + f'dark_ratio/dark_ratio_values_{str(block.height).zfill(6)}.zarr', dark_ratio_values)
-                zarr.save(savelocation + f'current_assets/current_assets_values_{str(block.height).zfill(6)}.zarr', current_assets_values)
-                zarr.save(savelocation + f'current_assets_index/current_assets_index_{str(block.height).zfill(6)}.zarr', current_assets_index)
-                zarr.save(savelocation + f'dark_ratio_index/dark_ratio_index_{str(block.height).zfill(6)}.zarr', dark_ratio_index)
-                
+                            dark_assets[out_sender] -= weight[out_sender][out_receiver]*dark_ratio[out_sender]
+                            dark_assets[out_receiver] += weight[out_sender][out_receiver]*dark_ratio[out_sender]
+                            current_assets[out_sender] -= weight[out_sender][out_receiver]
+                            current_assets[out_receiver] += weight[out_sender][out_receiver]
+                            block_clusters.add(out_receiver)
+                # block level, all blocks transactions have been analysed
+                # update dark assets ratio of all clusters happeared in current block
+                for cluster in block_clusters:
+                    if cluster in clust_is_black_ground_set:
+                        dark_assets[cluster] = abs(current_assets[cluster])
+                        dark_ratio[cluster] = 1.0
+                    else:
+                        if current_assets[cluster] > 0:
+                            dark_ratio[cluster] = dark_assets[cluster]/current_assets[cluster]
+                        else:
+                            dark_ratio[cluster] = 0.0
 
             # Initialize and save per day
             current_assets_values = np.array(list(current_assets.values()))
             dark_ratio_values = np.array(list(dark_ratio.values()))
+            dark_assets_values = np.array(list(dark_assets.values()))
             current_assets_index = np.array(list(current_assets.keys()))
             dark_ratio_index = np.array(list(dark_ratio.keys()))
+            dark_assets_index = np.array(list(dark_assets.keys()))
 
-            savelocation = "/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_final/daily/"
-            zarr.save(savelocation + f'dark_ratio/dark_ratio_values_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_values)
+            savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data/daily/"
             zarr.save(savelocation + f'current_assets/current_assets_values_{day.strftime("%Y-%m-%d")}.zarr', current_assets_values)
             zarr.save(savelocation + f'current_assets_index/current_assets_index_{day.strftime("%Y-%m-%d")}.zarr', current_assets_index)
-            zarr.save(savelocation + f'dark_assets_index/dark_ratio_index_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_index)
+            zarr.save(savelocation + f'dark_ratio/dark_ratio_values_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_values)
+            zarr.save(savelocation + f'dark_ratio_index/dark_ratio_index_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_index)
+            zarr.save(savelocation + f'dark_assets/dark_assets_values_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_values)
+            zarr.save(savelocation + f'dark_assets_index/dark_assets_index_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_index)
             logging.info(f'results day:{day}')
+            skip_last_day += 1
 
-        # Initialize and save per block
+        # Initialize and save per day
         current_assets_values = np.array(list(current_assets.values()))
         dark_ratio_values = np.array(list(dark_ratio.values()))
+        dark_assets_values = np.array(list(dark_assets.values()))
         current_assets_index = np.array(list(current_assets.keys()))
         dark_ratio_index = np.array(list(dark_ratio.keys()))
+        dark_assets_index = np.array(list(dark_assets.keys()))
 
-        savelocation = "/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_final/weekly/"
+        savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data/weekly/"
         zarr.save(savelocation + f'dark_ratio/dark_ratio_values_{week.strftime("%Y-%m-%d")}.zarr', dark_ratio_values)
         zarr.save(savelocation + f'current_assets/current_assets_values_{week.strftime("%Y-%m-%d")}.zarr', current_assets_values)
         zarr.save(savelocation + f'current_assets_index/current_assets_index_{week.strftime("%Y-%m-%d")}.zarr', current_assets_index)
         zarr.save(savelocation + f'dark_ratio_index/dark_ratio_index_{week.strftime("%Y-%m-%d")}.zarr', dark_ratio_index)
+        zarr.save(savelocation + f'dark_assets/dark_assets_values_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_values)
+        zarr.save(savelocation + f'dark_assets_index/dark_assets_index_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_index)
         logging.info(f'results week:{week}')
+
+        tqdm_bar.set_description(f"week of '{week.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
 
 
     
