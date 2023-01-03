@@ -12,6 +12,8 @@ import bz2
 import matplotlib.pyplot as plt
 import math
 import sys, os, os.path, socket
+import logging
+import gc
 
 
 from util import SYMBOLS, DIR_PARSED, SimpleChrono
@@ -163,20 +165,20 @@ def build_dark_dictionary(ratio, idx):
     
     return dark_ratio_dict
 
-def load_dictionaries(date, heur, timeunit):
+def load_dictionaries(date, heur, freq):
 
-    if timeunit == "day":
-        timeunit = "daily"
-    elif timeunit == "week":
-        timeunit = "weekly"
+    if freq == "day":
+        freq = "daily"
+    elif freq == "week":
+        freq = "weekly"
 
-    current_assets_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data/{timeunit}/current_assets/"
+    current_assets_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data_v2/{freq}/current_assets/"
     
-    current_index_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data/{timeunit}/current_assets_index/"
+    current_index_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data_v2/{freq}/current_assets_index/"
         
-    dark_ratio_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data/{timeunit}/dark_ratio/"
+    dark_ratio_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data_v2/{freq}/dark_ratio/"
     
-    dark_index_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data/{timeunit}/dark_ratio_index/"
+    dark_index_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data_v2/{freq}/dark_ratio_index/"
   
 
     current_assets_file = f"{current_assets_path}current_assets_values_{date}.zarr"
@@ -192,25 +194,6 @@ def load_dictionaries(date, heur, timeunit):
         dark_ratios_dict = build_dark_dictionary(dark_ratio_file, dark_index_file)
     
     return current_assets_dict,dark_ratios_dict
-
-def g_add_node_attributes(node):
-
-    #print(current_assets_dict)
-    # print(node)
-    # print(current_assets_dict[node])
-    # print(dark_ratios_dict[node])
-
-    # if g.has_node(node):
-    #     # g[node]['current_assets'] = current_assets_dict[node]
-    #     # g[node]['dark_ratio']  = dark_ratios_dict[node]
-    #     attrs_n = [node, {'current_assets': current_assets_dict[node], 'dark_ratio': dark_ratios_dict[node]}]
-    #     nx.set_node_attributes(g, attrs_n)
-    #     G.node[node]['Attributes']
-    
-    if g.has_node(node):
-        g.nodes[node]['current_assets'] = current_assets_dict[node]
-        g.nodes[node]['dark_ratio'] = dark_ratios_dict[node]
-    # g.add_node(node, current_assets = current_assets_dict[node], dark_ratio = dark_ratios_dict[node])
                     
                 
                 
@@ -219,6 +202,11 @@ def daterange(date1, date2, by=1):
 
 if __name__ == "__main__":   
     options, args = parse_command_line()
+
+    switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
+
+    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/logfile_networks_builder_final_heur_{options.heuristic}_{switcherback[options.frequency]}", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
+
     chrono      = SimpleChrono()
     chain       = blocksci.Blockchain("/local/scratch/exported/blockchain_parsed/bitcoin_old.cfg")
 
@@ -243,8 +231,6 @@ if __name__ == "__main__":
         chrono.add_tic("net")
         g = nx.DiGraph()
 
-        switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
-
         networks_path = f"/local/scratch/exported/blockchain_parsed/bitcoin/heur_{options.heuristic}_networks_{switcherback[options.frequency]}"
         unit_graph_file = f"{networks_path}/{timeunit.strftime('%Y-%m-%d')}.graphml.bz2"
         
@@ -254,12 +240,12 @@ if __name__ == "__main__":
 
         list_of_nodes = list(g.nodes)
         
-        print(f'list of nodes of size {len(list_of_nodes)}: {list_of_nodes}')
+        # print(f'list of nodes of size {len(list_of_nodes)}: {list_of_nodes}')
         
         # print(f'current_assets_dict_full[int(k)] : {current_assets_dict_full[77262777]}')
 
         current_assets_dict_filtered = { k: current_assets_dict_full[int(k)] for k in list_of_nodes }#int(k)
-        dark_ratios_dict_filtered = { k: dark_ratios_dict_full[int(k)] for k in list_of_nodes } 
+        dark_ratios_dict_filtered = { k: dark_ratios_dict_full[int(k)] for k in list_of_nodes }
 
         # adding graph attributes for {timeunit.strftime('%Y-%m-%d')}
         for node in g.nodes():
@@ -268,32 +254,39 @@ if __name__ == "__main__":
             
             nx.set_node_attributes(g, {node:dark_ratios_dict_filtered[node]}, 'dark_ratio')
             
-        
-        print(f'size of g.nodes :{len(g.nodes(data=True))}')
-        print(g.nodes(data=True))
+        del current_assets_dict_full
+        del dark_ratios_dict_full
+        del current_assets_dict_filtered
+        del dark_ratios_dict_filtered
+        gc.collect()
+
+        # print(f'size of g.nodes :{len(g.nodes(data=True))}')
+        # print(g.nodes(data=True))
 
         CA_assortativity = nx.attribute_assortativity_coefficient(g, "current_assets")
-        DR_assortativity = nx.attribute_assortativity_coefficient(g, "dark_ratio")
+        x = nx.attribute_assortativity_coefficient(g, "dark_ratio")
 
-        print(type(CA_assortativity))
-        print(type(DR_assortativity))
+        # print(type(CA_assortativity))
+        # print(type(DR_assortativity))
 
         if math.isnan(CA_assortativity):
-            CA_assortativity = -1
+            CA_assortativity = -100.0
             
         if math.isnan(DR_assortativity):
-            DR_assortativity = -1
+            DR_assortativity = -100.0
         
         g.graph['CA assortativity'] = CA_assortativity
         g.graph['DR assortativity'] = DR_assortativity
 
-        print(f'CA assortativity :{CA_assortativity}')
-        print(f'DR assortativity :{DR_assortativity}')
+        # print(f'CA assortativity :{CA_assortativity}')
+        # print(f'DR assortativity :{DR_assortativity}')
         
         savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_networks_v2/{switcherback[options.frequency]}"
         unitsavelocation = f"{savelocation}/{timeunit.strftime('%Y-%m-%d')}.graphml.bz2"
 
         nx.write_graphml(g, unitsavelocation)
+
+        logging.info(f'results of timeunit:{timeunit}')
 
         tqdm_bar.set_description(f"{switcherback[options.frequency]} of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
 
