@@ -203,6 +203,7 @@ if __name__ == "__main__":
     chrono.print(message="init")
     print(f"[CALC] Starting the grayscale diffusion for all the blockchain...")
 
+    currentBlock = 0
     # printcounter = 0
 
     for week in tqdm_bar:
@@ -228,6 +229,9 @@ if __name__ == "__main__":
                 continue
 
             for block in dayblocks:
+
+                if block.height < currentBlock:
+                    continue
                 
                 # set of clusters who happeared in the current block
                 block_clusters = set()
@@ -309,6 +313,8 @@ if __name__ == "__main__":
                         else:
                             dark_ratio[cluster] = 0.0
                     
+                    currentBlock += 1
+
                     # Unusual Values monitoring
                     with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_v2/unusual_values.txt", "a") as f:
                         if dark_ratio[cluster] < 0 or dark_ratio[cluster] > 1 or math.isnan(dark_ratio[cluster]) or math.isinf(dark_ratio[cluster]):
@@ -321,7 +327,7 @@ if __name__ == "__main__":
                             print(f'error value of dark_assets at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_assets[cluster]}', file=f)
 
                 with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_v2/block_progress.txt", "a") as f:
-                    print(f'finished block={block.height} on day:{day} and week:{week}', file=f)
+                    print(f'finished block={block.height} where currentBlock={currentBlock} on day:{day} and week:{week}', file=f)
 
 
                 # Regular monitoring of values
