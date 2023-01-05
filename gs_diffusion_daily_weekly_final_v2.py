@@ -26,6 +26,7 @@ from itertools import compress
 from scipy.sparse import csc_matrix
 from collections import defaultdict
 import logging
+import math
 
 
 from util import SYMBOLS, DIR_BCHAIN, DIR_PARSED, SimpleChrono
@@ -144,7 +145,7 @@ if __name__ == "__main__":
 
     options, args = parse_command_line()
 
-    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/logfile_daily_weekly_final_heur_{options.heuristic}_v2", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
+    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_v2/logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
 
     # Start Chrono
     chrono = SimpleChrono()
@@ -179,7 +180,6 @@ if __name__ == "__main__":
     # set of black users
     clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground)) # transform clust_is_black_ground into a set where we consider only black clusters.
 
-    
     if options.start_date != None:
         savedDataLocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data_v2/weekly/"
 
@@ -198,13 +198,13 @@ if __name__ == "__main__":
         current_assets = defaultdict(lambda: 0)
         dark_assets = defaultdict(lambda: 0)
         dark_ratio = defaultdict(lambda: 0.0)
-    
 
 
     chrono.print(message="init")
     print(f"[CALC] Starting the grayscale diffusion for all the blockchain...")
 
-    #
+    # printcounter = 0
+
     for week in tqdm_bar:
         chrono.add_tic("net")
         weekrange = [week, week + timedelta(days=7)]
@@ -228,6 +228,7 @@ if __name__ == "__main__":
                 continue
 
             for block in dayblocks:
+                
                 # set of clusters who happeared in the current block
                 block_clusters = set()
                 #______________________________TRX level_____________________________________
@@ -284,27 +285,97 @@ if __name__ == "__main__":
                         block_clusters.add(out_sender)
                         for out_receiver, receiver_value in clustered_outputs_dict.items():
 
-                            current_assets[out_sender] -= weight[out_sender][out_receiver]
-                            current_assets[out_receiver] += weight[out_sender][out_receiver]
-                            
+                            weight_s_r = weight[out_sender][out_receiver]
+                            current_assets[out_sender] -= weight_s_r
+                            current_assets[out_receiver] += weight_s_r
+
+                            if current_assets[out_sender] < 0:
+                                current_assets[out_sender] = 0
+
                             if dark_ratio[out_sender] > 0 and dark_ratio[out_sender] <= 1 :
-                                # dark_assets[out_sender] = max(dark_assets[out_sender] - (weight[out_sender][out_receiver]) * dark_ratio[out_sender], 0)
-                                # dark_assets[out_receiver] = min(dark_assets[out_receiver] + (weight[out_sender][out_receiver]) * dark_ratio[out_sender], abs(current_assets[out_receiver]))
-                                dark_assets[out_sender] = clamp(dark_assets[out_sender] - (weight[out_sender][out_receiver] * dark_ratio[out_sender]), 0, abs(current_assets[out_sender]))
-                                dark_assets[out_receiver] = clamp(dark_assets[out_receiver] + (weight[out_sender][out_receiver] * dark_ratio[out_sender]), 0, abs(current_assets[out_receiver]))
+                                dark_assets[out_sender] = clamp(dark_assets[out_sender] - (weight_s_r * dark_ratio[out_sender]), 0, current_assets[out_sender])
+                                dark_assets[out_receiver] = clamp(dark_assets[out_receiver] + (weight_s_r * dark_ratio[out_sender]), 0, current_assets[out_receiver])
                             
                             block_clusters.add(out_receiver)
                 # block level, all blocks transactions have been analysed
                 # update dark assets ratio of all clusters happeared in current block
                 for cluster in block_clusters:
                     if cluster in clust_is_black_ground_set:
-                        dark_assets[cluster] = abs(current_assets[cluster])
+                        dark_assets[cluster] = current_assets[cluster]
                         dark_ratio[cluster] = 1.0
                     else:
                         if current_assets[cluster] > 0 and dark_assets[cluster] > 0:
                             dark_ratio[cluster] = clamp(dark_assets[cluster]/current_assets[cluster], 0.0, 1.0)
                         else:
                             dark_ratio[cluster] = 0.0
+                    
+                    # Unusual Values monitoring
+                    with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_v2/unusual_values.txt", "a") as f:
+                        if dark_ratio[cluster] < 0 or dark_ratio[cluster] > 1 or math.isnan(dark_ratio[cluster]) or math.isinf(dark_ratio[cluster]):
+                            print(f'error value of dark_ratio at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_ratio[cluster]}', file=f)
+                        
+                        if current_assets[cluster] < 0 or  math.isnan(current_assets[cluster]) or math.isinf(current_assets[cluster]):
+                            print(f'error value of current_assets at week={week}, day={day}, block={block.height}, cluster={cluster}, value={current_assets[cluster]}', file=f)
+                        
+                        if dark_assets[cluster] < 0 or  math.isnan(dark_assets[cluster]) or math.isinf(dark_assets[cluster]):
+                            print(f'error value of dark_assets at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_assets[cluster]}', file=f)
+
+                with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_v2/block_progress.txt", "a") as f:
+                    print(f'finished block={block.height} on day:{day} and week:{week}', file=f)
+
+
+                # Regular monitoring of values
+                # if printcounter == 50000:
+
+                #     with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_v2/monitoring_values.txt", "a") as f:
+
+                #         print(f'----------Results for block:{block.height}----------', file=f)
+                #         print(f'current_assets after block has finished:{block.height}, during day:{day} and week:{week}', file=f)
+                #         i = 0
+                #         for k, v in current_assets.items():
+                #             try:
+                #                 print(f'b={block.height}, {k}:{format_e(Decimal(v))}, ', end='', file=f)
+                #                 if i == 9:
+                #                     print('\n', file=f)
+                #                     i = 0
+                #                 i+=1
+                #             except IndexError:
+                #                 pass
+
+                #         print('\n', file=f)
+
+                #         print(f'dark_assets after block has finished:{block.height}', file=f)
+                #         i = 0
+                #         for k, v in dark_assets.items():
+                #             try:
+                #                 print(f'{k}:{format_e(Decimal(v))}, ', end='', file=f)
+                #                 if i == 9:
+                #                     print('\n', file=f)
+                #                     i = 0
+                #                 i+=1
+                #             except IndexError:
+                #                 pass
+
+                #         print('\n', file=f)
+
+                #         print(f'dark_ratio after block has finished:{block.height}', file=f)
+                #         i = 0
+                #         for k, v in dark_ratio.items():
+                #             try:
+                #                 print(f'{k}:{format_e(Decimal(v))}, ', end='', file=f)
+                #                 if i == 9:
+                #                     print('\n', file=f)
+                #                     i = 0
+                #                 i+=1
+                #             except IndexError:
+                #                 pass
+
+                #         print('\n', file=f)
+                #         printcounter = 0
+                    
+                
+                # printcounter += 1
+
 
 
             # Initialize and save per day
