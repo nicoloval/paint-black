@@ -175,17 +175,14 @@ if __name__ == "__main__":
     if options.start_date != None:
         savedDataLocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data/weekly/"
 
-        current_assets_zarr = zarr.load(savedDataLocation + f'current_assets/current_assets_values_{start_date.strftime("%Y-%m-%d")}.zarr')
-        current_assets_index_zarr = zarr.load(savedDataLocation + f'current_assets_index/current_assets_index_{start_date.strftime("%Y-%m-%d")}.zarr')
-        current_assets = defaultdict(lambda: 0, dict(zip(current_assets_index_zarr, current_assets_zarr)))
+        current_assets_zarr = zarr.load(savedDataLocation + f'current_assets/current_assets_{start_date.strftime("%Y-%m-%d")}.zarr')
+        current_assets = defaultdict(lambda: 0, dict(zip(current_assets_zarr["current_assets_index"], current_assets_zarr["current_assets_values"])))
 
-        dark_assets_zarr = zarr.load(savedDataLocation + f'dark_assets/dark_assets_values_{start_date.strftime("%Y-%m-%d")}.zarr')
-        dark_assets_index_zarr = zarr.load(savedDataLocation + f'dark_assets_index/dark_assets_index_{start_date.strftime("%Y-%m-%d")}.zarr')
-        dark_assets = defaultdict(lambda: 0, dict(zip(dark_assets_index_zarr, dark_assets_zarr)))
+        dark_assets_zarr = zarr.load(savedDataLocation + f'dark_assets/dark_assets_{start_date.strftime("%Y-%m-%d")}.zarr')
+        dark_assets = defaultdict(lambda: 0, dict(zip(dark_assets_zarr["dark_assets_index"], dark_assets_zarr["dark_assets_values"])))
 
-        dark_ratio_zarr = zarr.load(savedDataLocation + f'dark_ratio/dark_ratio_values_{start_date.strftime("%Y-%m-%d")}.zarr')
-        dark_ratio_index_zarr = zarr.load(savedDataLocation + f'dark_ratio_index/dark_ratio_index_{start_date.strftime("%Y-%m-%d")}.zarr')
-        dark_ratio = defaultdict(lambda: 0.0, dict(zip(dark_ratio_index_zarr, dark_ratio_zarr)))
+        dark_ratio_zarr = zarr.load(savedDataLocation + f'dark_ratio/dark_ratio_{start_date.strftime("%Y-%m-%d")}.zarr')
+        dark_ratio = defaultdict(lambda: 0, dict(zip(dark_ratio_zarr["dark_ratio_index"], dark_ratio_zarr["dark_ratio_values"])))
     else:
         current_assets = defaultdict(lambda: 0)
         dark_assets = defaultdict(lambda: 0)
@@ -300,8 +297,6 @@ if __name__ == "__main__":
                             dark_ratio[cluster] = dark_assets[cluster]/current_assets[cluster]
                         else:
                             dark_ratio[cluster] = 0.0
-                    
-                    currentBlock += 1
 
                     # Unusual Values monitoring
                     with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}/unusual_values.txt", "a") as f:
@@ -315,7 +310,9 @@ if __name__ == "__main__":
                             print(f'error value of dark_assets at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_assets[cluster]}', file=f)
 
                 with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}/block_progress.txt", "a") as f:
-                    print(f'finished block={block.height} where currentBlock={currentBlock} on day:{day} and week:{week}', file=f)
+                    print(f'finished block={block.height} where currentBlock={currentBlock} , day:{day} , week:{week} , time:{datetime.datetime.now()}', file=f)
+                
+                currentBlock += 1
 
                 # Regular monitoring of values
                 # if printcounter == 25000:
@@ -380,12 +377,9 @@ if __name__ == "__main__":
             dark_assets_index = np.array(list(dark_assets.keys()))
 
             savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data/daily/"
-            zarr.save(savelocation + f'current_assets/current_assets_values_{day.strftime("%Y-%m-%d")}.zarr', current_assets_values)
-            zarr.save(savelocation + f'current_assets_index/current_assets_index_{day.strftime("%Y-%m-%d")}.zarr', current_assets_index)
-            zarr.save(savelocation + f'dark_ratio/dark_ratio_values_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_values)
-            zarr.save(savelocation + f'dark_ratio_index/dark_ratio_index_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_index)
-            zarr.save(savelocation + f'dark_assets/dark_assets_values_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_values)
-            zarr.save(savelocation + f'dark_assets_index/dark_assets_index_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_index)
+            zarr.save(savelocation + f'current_assets/current_assets_{day.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
+            zarr.save(savelocation + f'dark_ratio/dark_ratio_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_values=dark_ratio_values, dark_ratio_index=dark_ratio_index)
+            zarr.save(savelocation + f'dark_assets/dark_assets_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_values=dark_assets_values, dark_assets_index=dark_assets_index)
             logging.info(f'results day:{day}')
             skip_last_day += 1
 
@@ -398,12 +392,9 @@ if __name__ == "__main__":
         dark_assets_index = np.array(list(dark_assets.keys()))
 
         savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data/weekly/"
-        zarr.save(savelocation + f'dark_ratio/dark_ratio_values_{week.strftime("%Y-%m-%d")}.zarr', dark_ratio_values)
-        zarr.save(savelocation + f'current_assets/current_assets_values_{week.strftime("%Y-%m-%d")}.zarr', current_assets_values)
-        zarr.save(savelocation + f'current_assets_index/current_assets_index_{week.strftime("%Y-%m-%d")}.zarr', current_assets_index)
-        zarr.save(savelocation + f'dark_ratio_index/dark_ratio_index_{week.strftime("%Y-%m-%d")}.zarr', dark_ratio_index)
-        zarr.save(savelocation + f'dark_assets/dark_assets_values_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_values)
-        zarr.save(savelocation + f'dark_assets_index/dark_assets_index_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_index)
+        zarr.save(savelocation + f'current_assets/current_assets_{week.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
+        zarr.save(savelocation + f'dark_ratio/dark_ratio_{week.strftime("%Y-%m-%d")}.zarr', dark_ratio_values=dark_ratio_values, dark_ratio_index=dark_ratio_index)
+        zarr.save(savelocation + f'dark_assets/dark_assets_{week.strftime("%Y-%m-%d")}.zarr', dark_assets_values=dark_assets_values, dark_assets_index=dark_assets_index)
         logging.info(f'results week:{week}')
 
         tqdm_bar.set_description(f"week of '{week.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
