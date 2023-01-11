@@ -133,11 +133,37 @@ class AddressMapper(): # same as before
 def daterange(date1, date2, by=1):
     return [  date1 + timedelta(n) for n in range(0, int((date2 - date1).days)+1, by) ]
 
+class Graph:
+
+    def __init__(self):
+        self.graph = dict()
+
+
+    def add_edge(self, node1, node2, cost):
+        if node1 not in self.graph:
+            self.graph[node1] = []
+
+        if node2 not in self.graph:
+            self.graph[node2] = []
+
+        self.graph[node1].append((node2, int(cost)))
+
+        if len(self.graph[node1]) == 0:
+            self.graph.pop(node1)
+
+    def print_graph(self, f):
+
+        for source, destination in self.graph.items():
+            print(f"{source}->{destination}", file=f)
+
+    def graph_size(self):
+        return len(self.graph)
+
 if __name__ == "__main__":
 
     options, args = parse_command_line()
 
-    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}/logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
+    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_test/logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
 
     # Start Chrono
     chrono = SimpleChrono()
@@ -224,6 +250,7 @@ if __name__ == "__main__":
                 
                 # set of clusters who happeared in the current block
                 block_clusters = set()
+                g = Graph()
                 #______________________________TRX level_____________________________________
 
                 for trx in block.txes:
@@ -269,6 +296,7 @@ if __name__ == "__main__":
                             for out_receiver, receiver_value in clustered_outputs_dict.items():
                                 # Calculate the weight of the edge and add the edge to the graph
                                 weight[out_sender][out_receiver] = sender_value/total_trx_input_value*receiver_value
+                                g.add_edge(out_sender, out_receiver, sender_value/total_trx_input_value*receiver_value)
 
                     # once we computed all the weights, we can finally compute the new assets
                     for out_sender, sender_value in clustered_inputs_dict.items():
@@ -299,7 +327,7 @@ if __name__ == "__main__":
                             dark_ratio[cluster] = 0.0
 
                     # Unusual Values monitoring
-                    with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}/unusual_values.txt", "a") as f:
+                    with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_test/unusual_values.txt", "a") as f:
                         if dark_ratio[cluster] < 0 or dark_ratio[cluster] > 1 or math.isnan(dark_ratio[cluster]) or math.isinf(dark_ratio[cluster]):
                             print(f'error value of dark_ratio at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_ratio[cluster]}', file=f)
                         
@@ -309,10 +337,98 @@ if __name__ == "__main__":
                         if dark_assets[cluster] < 0 or  math.isnan(dark_assets[cluster]) or math.isinf(dark_assets[cluster]):
                             print(f'error value of dark_assets at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_assets[cluster]}', file=f)
 
-                with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}/block_progress.txt", "a") as f:
-                    print(f'finished block={block.height} where currentBlock={currentBlock} , day:{day} , week:{week} , time:{datetime.datetime.now()}', file=f)
+                with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_test/block_progress.txt", "a") as f:
+                    print(f'finished block={block.height} where currentBlock={currentBlock} , day:{day} , week:{week} , time:{datetime.now()}', file=f)
                 
                 currentBlock += 1
+
+                if block.height == 185086 or block.height == 185087 or block.height == 185088:
+
+                    with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_test/_aroundBlock_185087.txt", "a") as f:
+                        print(f'----------Results for block:{block.height}----------', file=f)
+                        print(f'g.graph size:{g.graph_size()}', file=f)
+                        g.print_graph(f)
+
+
+                        print(f'current_assets after block has finished:{block.height}', file=f)
+                        i = 0
+                        for k, v in current_assets.items():
+                            if True:
+                                print(f'CA b={block.height}, {k}:{v}, ', end='', file=f)
+                                if i == 9:
+                                    print('\n', file=f)
+                                    i = 0
+                                i+=1
+
+                        print('\n', file=f)
+
+                        print(f'dark_assets after block has finished:{block.height}', file=f)
+                        i = 0
+                        for k, v in dark_assets.items():
+                            if v != 0:
+                                print(f'DA b={block.height}, {k}:{v}, ', end='', file=f)
+                                if i == 9:
+                                    print('\n', file=f)
+                                    i = 0
+                                i+=1
+
+                        print('\n', file=f)
+
+                        print(f'dark_ratio after block has finished:{block.height}', file=f)
+                        i = 0
+                        for k, v in dark_ratio.items():
+                            if v != 0:
+                                print(f'DR b={block.height}, {k}:{v}, ', end='', file=f)
+                                if i == 9:
+                                    print('\n', file=f)
+                                    i = 0
+                                i+=1
+
+                        print('\n', file=f)
+
+                if block.height == 185090:
+                    with open("tmux-buffer_copy8.txt", "a") as f:
+                        print(f'----------Results for block:{block.height}----------', file=f)
+                        print(f'g.graph size:{g.graph_size()}', file=f)
+                        g.print_graph(f)
+
+
+                        print(f'current_assets after block has finished:{block.height}', file=f)
+                        i = 0
+                        for k, v in current_assets.items():
+                            if True:
+                                print(f'CA b={block.height}, {k}:{v}, ', end='', file=f)
+                                if i == 9:
+                                    print('\n', file=f)
+                                    i = 0
+                                i+=1
+
+                        print('\n', file=f)
+
+                        print(f'dark_assets after block has finished:{block.height}', file=f)
+                        i = 0
+                        for k, v in dark_assets.items():
+                            if v != 0:
+                                print(f'DA b={block.height}, {k}:{v}, ', end='', file=f)
+                                if i == 9:
+                                    print('\n', file=f)
+                                    i = 0
+                                i+=1
+
+                        print('\n', file=f)
+
+                        print(f'dark_ratio after block has finished:{block.height}', file=f)
+                        i = 0
+                        for k, v in dark_ratio.items():
+                            if v != 0:
+                                print(f'DR b={block.height}, {k}:{v}, ', end='', file=f)
+                                if i == 9:
+                                    print('\n', file=f)
+                                    i = 0
+                                i+=1
+
+                        print('\n', file=f)
+                    exit = 1
 
                 # Regular monitoring of values
                 # if printcounter == 25000:
@@ -369,35 +485,39 @@ if __name__ == "__main__":
 
 
             # Initialize and save per day
-            current_assets_values = np.array(list(current_assets.values()))
-            dark_ratio_values = np.array(list(dark_ratio.values()))
-            dark_assets_values = np.array(list(dark_assets.values()))
-            current_assets_index = np.array(list(current_assets.keys()))
-            dark_ratio_index = np.array(list(dark_ratio.keys()))
-            dark_assets_index = np.array(list(dark_assets.keys()))
+            # current_assets_values = np.array(list(current_assets.values()))
+            # dark_ratio_values = np.array(list(dark_ratio.values()))
+            # dark_assets_values = np.array(list(dark_assets.values()))
+            # current_assets_index = np.array(list(current_assets.keys()))
+            # dark_ratio_index = np.array(list(dark_ratio.keys()))
+            # dark_assets_index = np.array(list(dark_assets.keys()))
 
-            savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data/daily/"
-            zarr.save(savelocation + f'current_assets/current_assets_{day.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
-            zarr.save(savelocation + f'dark_ratio/dark_ratio_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_values=dark_ratio_values, dark_ratio_index=dark_ratio_index)
-            zarr.save(savelocation + f'dark_assets/dark_assets_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_values=dark_assets_values, dark_assets_index=dark_assets_index)
+            # savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data/daily/"
+            # zarr.save(savelocation + f'current_assets/current_assets_{day.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
+            # zarr.save(savelocation + f'dark_ratio/dark_ratio_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_values=dark_ratio_values, dark_ratio_index=dark_ratio_index)
+            # zarr.save(savelocation + f'dark_assets/dark_assets_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_values=dark_assets_values, dark_assets_index=dark_assets_index)
             logging.info(f'results day:{day}')
             skip_last_day += 1
 
         # Initialize and save per day
-        current_assets_values = np.array(list(current_assets.values()))
-        dark_ratio_values = np.array(list(dark_ratio.values()))
-        dark_assets_values = np.array(list(dark_assets.values()))
-        current_assets_index = np.array(list(current_assets.keys()))
-        dark_ratio_index = np.array(list(dark_ratio.keys()))
-        dark_assets_index = np.array(list(dark_assets.keys()))
+        # current_assets_values = np.array(list(current_assets.values()))
+        # dark_ratio_values = np.array(list(dark_ratio.values()))
+        # dark_assets_values = np.array(list(dark_assets.values()))
+        # current_assets_index = np.array(list(current_assets.keys()))
+        # dark_ratio_index = np.array(list(dark_ratio.keys()))
+        # dark_assets_index = np.array(list(dark_assets.keys()))
 
-        savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data/weekly/"
-        zarr.save(savelocation + f'current_assets/current_assets_{week.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
-        zarr.save(savelocation + f'dark_ratio/dark_ratio_{week.strftime("%Y-%m-%d")}.zarr', dark_ratio_values=dark_ratio_values, dark_ratio_index=dark_ratio_index)
-        zarr.save(savelocation + f'dark_assets/dark_assets_{week.strftime("%Y-%m-%d")}.zarr', dark_assets_values=dark_assets_values, dark_assets_index=dark_assets_index)
+        # savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data/weekly/"
+        # zarr.save(savelocation + f'current_assets/current_assets_{week.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
+        # zarr.save(savelocation + f'dark_ratio/dark_ratio_{week.strftime("%Y-%m-%d")}.zarr', dark_ratio_values=dark_ratio_values, dark_ratio_index=dark_ratio_index)
+        # zarr.save(savelocation + f'dark_assets/dark_assets_{week.strftime("%Y-%m-%d")}.zarr', dark_assets_values=dark_assets_values, dark_assets_index=dark_assets_index)
         logging.info(f'results week:{week}')
 
         tqdm_bar.set_description(f"week of '{week.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
+
+        if exit == 1:
+            print('end')
+            break
 
 
     
