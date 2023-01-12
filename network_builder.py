@@ -14,6 +14,8 @@ import math
 import sys, os, os.path, socket
 import logging
 import gc
+import multiprocessing
+from tqdm.contrib.concurrent import process_map  # or thread_map
 
 
 from util import SYMBOLS, DIR_PARSED, SimpleChrono
@@ -191,6 +193,87 @@ def load_dictionaries(date, heur, freq):
 def daterange(date1, date2, by=1):
     return [  date1 + timedelta(n) for n in range(0, int((date2 - date1).days)+1, by) ]         
 
+def build_network_with_attributes(date):
+
+    savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_networks_v2_new/{switcherback[options.frequency]}"
+    unitsavelocation = f"{savelocation}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
+
+    if os.path.exists(unitsavelocation):
+        logging.info(f'process with PID:{os.getpid()} for the date{date} has started but the file exists so it will shutdown')
+        return "Already exists"
+    
+    logging.info(f'process with PID:{os.getpid()} for the date{date} has started')
+
+    start_time = datetime.now()
+    
+    chrono.add_tic("net")
+    g = nx.DiGraph()
+
+    networks_path = f"/local/scratch/exported/blockchain_parsed/bitcoin/heur_{options.heuristic}_networks_{switcherback[options.frequency]}"
+    unit_graph_file = f"{networks_path}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
+    
+    g = nx.read_graphml(unit_graph_file)
+
+    current_assets_dict_full, dark_ratios_dict_full = load_dictionaries(date, options.heuristic, switcherback[options.frequency])
+
+    list_of_nodes = list(g.nodes)
+    
+    # print(f'list of nodes of size {len(list_of_nodes)}: {list_of_nodes}')
+    
+    # print(f'current_assets_dict_full[int(k)] : {current_assets_dict_full[77262777]}')
+
+    current_assets_dict_filtered = { k: current_assets_dict_full[int(k)] for k in list_of_nodes }#int(k)
+    dark_ratios_dict_filtered = { k: dark_ratios_dict_full[int(k)] for k in list_of_nodes }
+
+    del current_assets_dict_full
+    del dark_ratios_dict_full
+
+    # adding graph attributes for {date.strftime('%Y-%m-%d')}
+    for node in g.nodes():
+        
+        nx.set_node_attributes(g, {node:current_assets_dict_filtered[node]}, 'current_assets')
+        
+        nx.set_node_attributes(g, {node:dark_ratios_dict_filtered[node]}, 'dark_ratio')
+        
+    del current_assets_dict_filtered
+    del dark_ratios_dict_filtered
+    gc.collect()
+
+    # print(f'size of g.nodes :{len(g.nodes(data=True))}')
+    # print(g.nodes(data=True))
+
+    logging.info(f'process with PID:{os.getpid()} for the date{date} has finished with t={datetime.now() - start_time} building the graph and now is starting assortativity calculation')
+
+    start_time = datetime.now()
+
+    CA_assortativity = nx.numeric_assortativity_coefficient(g, "current_assets")
+    DR_assortativity = nx.numeric_assortativity_coefficient(g, "dark_ratio")
+
+    # print(type(CA_assortativity))
+    # print(type(DR_assortativity))
+
+    if math.isnan(CA_assortativity):
+        CA_assortativity = -2.0
+        
+    if math.isnan(DR_assortativity):
+        DR_assortativity = -2.0
+    
+    g.graph['CA assortativity'] = CA_assortativity
+    g.graph['DR assortativity'] = DR_assortativity
+
+    # print(f'CA assortativity :{CA_assortativity}')
+    # print(f'DR assortativity :{DR_assortativity}')
+
+    nx.write_graphml(g, unitsavelocation)
+
+    logging.info(f'process with PID:{os.getpid()} for the date{date} has finished assortativity calculation and saved the results with t={datetime.now() - start_time}')
+
+    tqdm_bar.set_description(f"{switcherback[options.frequency]} of '{date.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
+
+    return f'process with PID:{os.getpid()} for the date{date} has finished'
+
+     
+
 if __name__ == "__main__":   
     options, args = parse_command_line()
 
@@ -219,70 +302,27 @@ if __name__ == "__main__":
     datelist = daterange(start_date, end_date, by=options.frequency)
     tqdm_bar = tqdm(datelist, desc="processed files")
 
-    for timeunit in tqdm_bar:
-#       chrono.add_tic("net0")
+    # pool = multiprocessing.Pool(processes = multiprocessing.cpu_count()-5)         # start 50 worker processes
+
+    # multiple_results = pool.map(build_network_with_attributes, tqdm_bar)
+
+    # start = time.time()
+
+    # # for timeunit in tqdm_bar:
+    # #     # print(timeunit)
+    # #     p.apply_async(build_network_with_attributes, [timeunit])
+    
+    # p.close()
+    # p.join()
+    # print("Complete")
+    # end = time.time()
+    # print('total time (s)= ' + str(end-start))
+
+    r = process_map(build_network_with_attributes, datelist, max_workers=10)
+
+    print(r)
             
-        chrono.add_tic("net")
-        g = nx.DiGraph()
-
-        networks_path = f"/local/scratch/exported/blockchain_parsed/bitcoin/heur_{options.heuristic}_networks_{switcherback[options.frequency]}"
-        unit_graph_file = f"{networks_path}/{timeunit.strftime('%Y-%m-%d')}.graphml.bz2"
         
-        g = nx.read_graphml(unit_graph_file)
-
-        current_assets_dict_full, dark_ratios_dict_full = load_dictionaries(timeunit, options.heuristic, switcherback[options.frequency])
-
-        list_of_nodes = list(g.nodes)
-        
-        # print(f'list of nodes of size {len(list_of_nodes)}: {list_of_nodes}')
-        
-        # print(f'current_assets_dict_full[int(k)] : {current_assets_dict_full[77262777]}')
-
-        current_assets_dict_filtered = { k: current_assets_dict_full[int(k)] for k in list_of_nodes }#int(k)
-        dark_ratios_dict_filtered = { k: dark_ratios_dict_full[int(k)] for k in list_of_nodes }
-
-        # adding graph attributes for {timeunit.strftime('%Y-%m-%d')}
-        for node in g.nodes():
-            
-            nx.set_node_attributes(g, {node:current_assets_dict_filtered[node]}, 'current_assets')
-            
-            nx.set_node_attributes(g, {node:dark_ratios_dict_filtered[node]}, 'dark_ratio')
-            
-        del current_assets_dict_full
-        del dark_ratios_dict_full
-        del current_assets_dict_filtered
-        del dark_ratios_dict_filtered
-        gc.collect()
-
-        # print(f'size of g.nodes :{len(g.nodes(data=True))}')
-        # print(g.nodes(data=True))
-
-        CA_assortativity = nx.numeric_assortativity_coefficient(g, "current_assets")
-        DR_assortativity = nx.numeric_assortativity_coefficient(g, "dark_ratio")
-
-        # print(type(CA_assortativity))
-        # print(type(DR_assortativity))
-
-        if math.isnan(CA_assortativity):
-            CA_assortativity = -2.0
-            
-        if math.isnan(DR_assortativity):
-            DR_assortativity = -2.0
-        
-        g.graph['CA assortativity'] = CA_assortativity
-        g.graph['DR assortativity'] = DR_assortativity
-
-        # print(f'CA assortativity :{CA_assortativity}')
-        # print(f'DR assortativity :{DR_assortativity}')
-        
-        savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_networks_v2_new/{switcherback[options.frequency]}"
-        unitsavelocation = f"{savelocation}/{timeunit.strftime('%Y-%m-%d')}.graphml.bz2"
-
-        nx.write_graphml(g, unitsavelocation)
-
-        logging.info(f'results of timeunit:{timeunit}')
-
-        tqdm_bar.set_description(f"{switcherback[options.frequency]} of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
 
     print('Process terminated, graphs and attributes created.')
     print(f"Graphs created in {chrono.elapsed('proc', format='%H:%M:%S')}")

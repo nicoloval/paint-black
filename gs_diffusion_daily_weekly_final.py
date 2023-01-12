@@ -10,7 +10,7 @@
 # here in this script we replicate the diffusion and from ground-truth we see how users turn black block by block
 
 import blocksci
-from decimal import Decimal
+from decimal import Decimal, getcontext
 import sys, os, os.path, socket
 import numpy as np
 np.set_printoptions(threshold=sys.maxsize)
@@ -159,11 +159,19 @@ class Graph:
     def graph_size(self):
         return len(self.graph)
 
+def clamp(n, minn, maxn):
+    if n < minn:
+        return minn
+    elif n > maxn:
+        return maxn
+    else:
+        return n
+
 if __name__ == "__main__":
 
     options, args = parse_command_line()
 
-    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_test/logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
+    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_test5/logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
 
     # Start Chrono
     chrono = SimpleChrono()
@@ -221,6 +229,8 @@ if __name__ == "__main__":
     currentBlock = 0 # to restart the simulation find out from logs and set last seen block from previous week 
     # printcounter = 0
 
+    # getcontext().prec = 50
+
     for week in tqdm_bar:
         chrono.add_tic("net")
         weekrange = [week, week + timedelta(days=7)]
@@ -249,11 +259,12 @@ if __name__ == "__main__":
                     continue
                 
                 # set of clusters who happeared in the current block
-                block_clusters = set()
+                
                 g = Graph()
                 #______________________________TRX level_____________________________________
 
                 for trx in block.txes:
+                    block_clusters = set()
                     #______________________________Initialize Variables_____________________________________
 
                     # 
@@ -273,7 +284,7 @@ if __name__ == "__main__":
                             # if it's the first time it happears,
                             # it starts from zero
                             # ai[b] += mi[b]
-                            current_assets[cluster] += value
+                            current_assets[cluster] = int(current_assets[cluster]) + int(value)
                             block_clusters.add(cluster)
                     else:
                         # loop over trx inputs to build a reduced representation of inputs
@@ -295,7 +306,7 @@ if __name__ == "__main__":
 
                             for out_receiver, receiver_value in clustered_outputs_dict.items():
                                 # Calculate the weight of the edge and add the edge to the graph
-                                weight[out_sender][out_receiver] = sender_value/total_trx_input_value*receiver_value
+                                weight[out_sender][out_receiver] = Decimal(sender_value/total_trx_input_value*receiver_value)
                                 g.add_edge(out_sender, out_receiver, sender_value/total_trx_input_value*receiver_value)
 
                     # once we computed all the weights, we can finally compute the new assets
@@ -306,28 +317,31 @@ if __name__ == "__main__":
                         block_clusters.add(out_sender)
                         for out_receiver, receiver_value in clustered_outputs_dict.items():
 
-                            current_assets[out_sender] -= weight[out_sender][out_receiver]
-                            current_assets[out_receiver] += weight[out_sender][out_receiver]
+                            current_assets[out_sender] = int(current_assets[out_sender]) - int(weight[out_sender][out_receiver])
+                            current_assets[out_receiver] = int(current_assets[out_receiver]) + int(weight[out_sender][out_receiver])
+
+                            # if current_assets[out_sender] < 0:
+                            #     current_assets[out_sender] = 0
 
                             if dark_ratio[out_sender] > 0 and dark_ratio[out_sender] <= 1 :
-                                dark_assets[out_sender] -= weight[out_sender][out_receiver]*dark_ratio[out_sender]
-                                dark_assets[out_receiver] += weight[out_sender][out_receiver]*dark_ratio[out_sender]
+                                dark_assets[out_sender] = clamp(int(dark_assets[out_sender]) - int(weight[out_sender][out_receiver]*dark_ratio[out_sender]), int(0), int(current_assets[out_sender]))
+                                dark_assets[out_receiver] = clamp(int(dark_assets[out_receiver]) + int(weight[out_sender][out_receiver]*dark_ratio[out_sender]), int(0), int(current_assets[out_receiver]))
                             
                             block_clusters.add(out_receiver)
-                # block level, all blocks transactions have been analysed
-                # update dark assets ratio of all clusters happeared in current block
-                for cluster in block_clusters:
-                    if cluster in clust_is_black_ground_set:
-                        dark_assets[cluster] = abs(current_assets[cluster])
-                        dark_ratio[cluster] = 1.0
-                    else:
-                        if current_assets[cluster] > 0:
-                            dark_ratio[cluster] = dark_assets[cluster]/current_assets[cluster]
+                    # trx level, all blocks transactions have been analysed
+                    # update dark assets ratio of all clusters happeared in current block
+                    for cluster in block_clusters:
+                        if cluster in clust_is_black_ground_set:
+                            dark_assets[cluster] = int(current_assets[cluster])
+                            dark_ratio[cluster] = Decimal(1.0)
                         else:
-                            dark_ratio[cluster] = 0.0
+                            if current_assets[cluster] > 0 and dark_assets[cluster] > 0:
+                                dark_ratio[cluster] = Decimal(dark_assets[cluster]) / Decimal(current_assets[cluster])
+                            else:
+                                dark_ratio[cluster] = Decimal(0.0)
 
                     # Unusual Values monitoring
-                    with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_test/unusual_values.txt", "a") as f:
+                    with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_test5/unusual_values.txt", "a") as f:
                         if dark_ratio[cluster] < 0 or dark_ratio[cluster] > 1 or math.isnan(dark_ratio[cluster]) or math.isinf(dark_ratio[cluster]):
                             print(f'error value of dark_ratio at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_ratio[cluster]}', file=f)
                         
@@ -337,14 +351,14 @@ if __name__ == "__main__":
                         if dark_assets[cluster] < 0 or  math.isnan(dark_assets[cluster]) or math.isinf(dark_assets[cluster]):
                             print(f'error value of dark_assets at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_assets[cluster]}', file=f)
 
-                with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_test/block_progress.txt", "a") as f:
+                with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_test5/block_progress.txt", "a") as f:
                     print(f'finished block={block.height} where currentBlock={currentBlock} , day:{day} , week:{week} , time:{datetime.now()}', file=f)
                 
                 currentBlock += 1
 
-                if block.height == 185086 or block.height == 185087 or block.height == 185088:
+                if block.height == 134636 or block.height == 134637 or block.height == 134638 or block.height == 185068 or block.height == 185069 or block.height == 185070:
 
-                    with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_test/_aroundBlock_185087.txt", "a") as f:
+                    with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_test5/_aroundBlock_134637_185069.txt", "a") as f:
                         print(f'----------Results for block:{block.height}----------', file=f)
                         print(f'g.graph size:{g.graph_size()}', file=f)
                         g.print_graph(f)
@@ -386,49 +400,49 @@ if __name__ == "__main__":
 
                         print('\n', file=f)
 
-                if block.height == 185090:
-                    with open("tmux-buffer_copy8.txt", "a") as f:
-                        print(f'----------Results for block:{block.height}----------', file=f)
-                        print(f'g.graph size:{g.graph_size()}', file=f)
-                        g.print_graph(f)
+                # if block.height == 129300:
+                #     with open("tmux-buffer_copy8.txt", "a") as f:
+                #         print(f'----------Results for block:{block.height}----------', file=f)
+                #         print(f'g.graph size:{g.graph_size()}', file=f)
+                #         g.print_graph(f)
 
 
-                        print(f'current_assets after block has finished:{block.height}', file=f)
-                        i = 0
-                        for k, v in current_assets.items():
-                            if True:
-                                print(f'CA b={block.height}, {k}:{v}, ', end='', file=f)
-                                if i == 9:
-                                    print('\n', file=f)
-                                    i = 0
-                                i+=1
+                #         print(f'current_assets after block has finished:{block.height}', file=f)
+                #         i = 0
+                #         for k, v in current_assets.items():
+                #             if True:
+                #                 print(f'CA b={block.height}, {k}:{v}, ', end='', file=f)
+                #                 if i == 9:
+                #                     print('\n', file=f)
+                #                     i = 0
+                #                 i+=1
 
-                        print('\n', file=f)
+                #         print('\n', file=f)
 
-                        print(f'dark_assets after block has finished:{block.height}', file=f)
-                        i = 0
-                        for k, v in dark_assets.items():
-                            if v != 0:
-                                print(f'DA b={block.height}, {k}:{v}, ', end='', file=f)
-                                if i == 9:
-                                    print('\n', file=f)
-                                    i = 0
-                                i+=1
+                #         print(f'dark_assets after block has finished:{block.height}', file=f)
+                #         i = 0
+                #         for k, v in dark_assets.items():
+                #             if v != 0:
+                #                 print(f'DA b={block.height}, {k}:{v}, ', end='', file=f)
+                #                 if i == 9:
+                #                     print('\n', file=f)
+                #                     i = 0
+                #                 i+=1
 
-                        print('\n', file=f)
+                #         print('\n', file=f)
 
-                        print(f'dark_ratio after block has finished:{block.height}', file=f)
-                        i = 0
-                        for k, v in dark_ratio.items():
-                            if v != 0:
-                                print(f'DR b={block.height}, {k}:{v}, ', end='', file=f)
-                                if i == 9:
-                                    print('\n', file=f)
-                                    i = 0
-                                i+=1
+                #         print(f'dark_ratio after block has finished:{block.height}', file=f)
+                #         i = 0
+                #         for k, v in dark_ratio.items():
+                #             if v != 0:
+                #                 print(f'DR b={block.height}, {k}:{v}, ', end='', file=f)
+                #                 if i == 9:
+                #                     print('\n', file=f)
+                #                     i = 0
+                #                 i+=1
 
-                        print('\n', file=f)
-                    exit = 1
+                #         print('\n', file=f)
+                #     exit = 1
 
                 # Regular monitoring of values
                 # if printcounter == 25000:
