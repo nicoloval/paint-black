@@ -327,12 +327,16 @@ if __name__ == "__main__":
                 currentBlock += 1
 
             # Initialize and save per day
-            current_assets_values = np.array(list(current_assets.values()))
-            dark_ratio_values = np.array(list(dark_ratio.values()))
-            dark_assets_values = np.array(list(dark_assets.values()))
-            current_assets_index = np.array(list(current_assets.keys()))
-            dark_ratio_index = np.array(list(dark_ratio.keys()))
-            dark_assets_index = np.array(list(dark_assets.keys()))
+            current_assets_index, current_assets_values = zip(*current_assets.items())
+            dark_assets_index, dark_assets_values = zip(*dark_assets.items())
+            dark_ratio_index, dark_ratio_values = zip(*dark_ratio.items())
+
+            # current_assets_values = np.array(list(current_assets.values()))
+            # dark_ratio_values = np.array(list(dark_ratio.values()))
+            # dark_assets_values = np.array(list(dark_assets.values()))
+            # current_assets_index = np.array(list(current_assets.keys()))
+            # dark_ratio_index = np.array(list(dark_ratio.keys()))
+            # dark_assets_index = np.array(list(dark_assets.keys()))
 
             savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data_v3/daily/"
             zarr.save(savelocation + f'current_assets/current_assets_{day.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
@@ -342,12 +346,16 @@ if __name__ == "__main__":
             skip_last_day += 1
 
         # Initialize and save per day
-        current_assets_values = np.array(list(current_assets.values()))
-        dark_ratio_values = np.array(list(dark_ratio.values()))
-        dark_assets_values = np.array(list(dark_assets.values()))
-        current_assets_index = np.array(list(current_assets.keys()))
-        dark_ratio_index = np.array(list(dark_ratio.keys()))
-        dark_assets_index = np.array(list(dark_assets.keys()))
+        current_assets_index, current_assets_values = zip(*current_assets.items())
+        dark_assets_index, dark_assets_values = zip(*dark_assets.items())
+        dark_ratio_index, dark_ratio_values = zip(*dark_ratio.items())
+
+        # current_assets_values = np.array(list(current_assets.values()))
+        # dark_ratio_values = np.array(list(dark_ratio.values()))
+        # dark_assets_values = np.array(list(dark_assets.values()))
+        # current_assets_index = np.array(list(current_assets.keys()))
+        # dark_ratio_index = np.array(list(dark_ratio.keys()))
+        # dark_assets_index = np.array(list(dark_assets.keys()))
 
         savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data_v3/weekly/"
         zarr.save(savelocation + f'current_assets/current_assets_{week.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
