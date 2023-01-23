@@ -5,7 +5,7 @@
 #     - `{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_data/` clustering data
 #     - `{DIR_PARSED}/{options.currency}.cfg` blockchain data
 # outputs:
-#     * zarr file: `cluster_is_black_when_block.zarr` index is cluster id, value is int block when the cluster became black which can also represent time.
+#     * zarr file: `` index is cluster id, value is int block when the cluster became black which can also represent time.
 
 # here in this script we replicate the diffusion and from ground-truth we see how users turn black block by block
 
@@ -14,21 +14,13 @@ from decimal import Decimal, getcontext
 import sys, os, os.path, socket
 import numpy as np
 np.set_printoptions(threshold=sys.maxsize)
-import networkx as nx
 import zarr
-import time
 from tqdm import tqdm
-import pandas as pd
-from csv import DictWriter, DictReader
-import pickle as pkl
 from datetime import datetime, timedelta
 from itertools import compress
-from scipy.sparse import csc_matrix
 from collections import defaultdict
 import logging
 import math
-
-
 from util import SYMBOLS, DIR_BCHAIN, DIR_PARSED, SimpleChrono
 
 def format_e(n):
@@ -76,7 +68,7 @@ def parse_command_line():
     return options, args
 
 
-class AddressMapper(): # same as before
+class AddressMapper():
     def __init__(self, chain):
         self.chain = chain
 
@@ -170,13 +162,11 @@ if __name__ == "__main__":
     print(f'start_date is set as: {start_date}')
     print(f'end_date is set as: {end_date}')
     weeksList = daterange(start_date, end_date, by=7)
-    
-    # blocks_list = chain.range(start_date, end_date)
 
     tqdm_bar = tqdm(weeksList, desc="processed files")
 
-    # set of black users
-    clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground)) # transform clust_is_black_ground into a set where we consider only black clusters.
+    # set of black users, transform clust_is_black_ground into a set where we consider only black clusters.
+    clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground))
 
     if options.start_date != None:
         savedDataLocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data_v3/weekly/"
@@ -198,7 +188,8 @@ if __name__ == "__main__":
     chrono.print(message="init")
     print(f"[CALC] Starting the grayscale diffusion for all the blockchain...")
 
-    currentBlock = 0 # to restart the simulation find out from logs and set last seen block from previous week 
+    # used to track blocks to ensure non are repeated. to restart the simulation find out from logs and set last seen block from previous week 
+    currentBlock = 0 
 
     for week in tqdm_bar:
         chrono.add_tic("net")
@@ -233,7 +224,6 @@ if __name__ == "__main__":
                     # set of clusters who happeared in the current trx
                     trx_clusters = set()
                     #______________________________Initialize Variables_____________________________________
-
                     # 
                     clustered_inputs_dict = defaultdict(lambda: 0)
                     clustered_outputs_dict = defaultdict(lambda: 0)
@@ -246,11 +236,6 @@ if __name__ == "__main__":
 
                         for out in trx.outputs:
                             cluster, value = am.cluster[am[out.address]], out.value
-                                
-                            # current asset is a default dict
-                            # if it's the first time it happears,
-                            # it starts from zero
-                            # ai[b] += mi[b]
                             current_assets[cluster] = int(current_assets[cluster]) + int(value)
                             trx_clusters.add(cluster)
                     else:
@@ -331,13 +316,6 @@ if __name__ == "__main__":
             dark_assets_index, dark_assets_values = zip(*dark_assets.items())
             dark_ratio_index, dark_ratio_values = zip(*dark_ratio.items())
 
-            # current_assets_values = np.array(list(current_assets.values()))
-            # dark_ratio_values = np.array(list(dark_ratio.values()))
-            # dark_assets_values = np.array(list(dark_assets.values()))
-            # current_assets_index = np.array(list(current_assets.keys()))
-            # dark_ratio_index = np.array(list(dark_ratio.keys()))
-            # dark_assets_index = np.array(list(dark_assets.keys()))
-
             savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data_v3/daily/"
             zarr.save(savelocation + f'current_assets/current_assets_{day.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
             zarr.save(savelocation + f'dark_assets/dark_assets_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_values=dark_assets_values, dark_assets_index=dark_assets_index)
@@ -345,17 +323,10 @@ if __name__ == "__main__":
             logging.info(f'results day:{day} with last block of the day being b={currentBlock - 1}')
             skip_last_day += 1
 
-        # Initialize and save per day
+        # Initialize and save per week
         current_assets_index, current_assets_values = zip(*current_assets.items())
         dark_assets_index, dark_assets_values = zip(*dark_assets.items())
         dark_ratio_index, dark_ratio_values = zip(*dark_ratio.items())
-
-        # current_assets_values = np.array(list(current_assets.values()))
-        # dark_ratio_values = np.array(list(dark_ratio.values()))
-        # dark_assets_values = np.array(list(dark_assets.values()))
-        # current_assets_index = np.array(list(current_assets.keys()))
-        # dark_ratio_index = np.array(list(dark_ratio.keys()))
-        # dark_assets_index = np.array(list(dark_assets.keys()))
 
         savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data_v3/weekly/"
         zarr.save(savelocation + f'current_assets/current_assets_{week.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
